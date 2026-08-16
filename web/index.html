@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downe Terminal</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+	<h1>DoWNE Terminal</h1>
+	<span id="status" class="status status-disconnected">disconnected</span>
+</header>
+
+<main>
+	<label for="ship">Ship</label>
+	<select id="ship"></select>
+
+	<label for="coordinates">Jump coordinates</label>
+	<input id="coordinates" type="text" autocomplete="off" placeholder="whatever the scout tells you">
+	<button id="send-coordinates">Send coordinates</button>
+
+	<div class="drive-row">
+		<span>Drive</span>
+		<button id="drive-toggle" data-charged="false">Uncharged</button>
+	</div>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

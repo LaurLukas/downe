@@ -1,0 +1,96 @@
+:root {
+	color-scheme: dark;
+	--bg: #0b0f12;
+	--panel: #121a20;
+	--text: #d8e6e0;
+	--accent: #35c2a0;
+	--danger: #d9534f;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background: var(--bg);
+	color: var(--text);
+	font-family: ui-monospace, "Courier New", monospace;
+	display: flex;
+	flex-direction: column;
+}
+
+header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 1rem;
+	border-bottom: 1px solid #223;
+}
+
+h1 {
+	font-size: 1.1rem;
+	margin: 0;
+	letter-spacing: 0.05em;
+}
+
+.status {
+	font-size: 0.85rem;
+	padding: 0.25rem 0.6rem;
+	border-radius: 999px;
+}
+
+.status-connected {
+	background: rgba(53, 194, 160, 0.15);
+	color: var(--accent);
+}
+
+.status-disconnected {
+	background: rgba(217, 83, 79, 0.15);
+	color: var(--danger);
+}
+
+main {
+	flex: 1;
+	padding: 1.5rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	max-width: 28rem;
+	margin: 0 auto;
+	width: 100%;
+}
+
+label {
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: #8fa3ab;
+	margin-top: 1rem;
+}
+
+select, input, button {
+	font: inherit;
+	color: inherit;
+	background: var(--panel);
+	border: 1px solid #223;
+	border-radius: 0.4rem;
+	padding: 0.6rem;
+}
+
+button {
+	cursor: pointer;
+	border-color: var(--accent);
+}
+
+button:active {
+	transform: translateY(1px);
+}
+
+.drive-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 1rem;
+}
