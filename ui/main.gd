@@ -9,7 +9,7 @@ extends Node
 
 const LISTEN_PORT := 8080
 
-var game_state := GameState.new()
+var game_state := FleetSetup.build_starting_fleet()
 var net_server := NetServer.new()
 var message_router: MessageRouter
 var persistence: Persistence

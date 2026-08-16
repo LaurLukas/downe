@@ -18,9 +18,6 @@ const SHIPS = [
 	["shepherd", "Shepherd"],
 	["quellon", "Quellon"],
 	["refinery_124", "Refinery 124"],
-	["endeavour", "Endeavour"],
-	["maliades", "Maliades"],
-	["pallas", "Pallas"],
 ];
 
 const statusEl = document.getElementById("status");

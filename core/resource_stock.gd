@@ -5,7 +5,7 @@ extends RefCounted
 ## requires an appropriate shuttle - that constraint lives above this
 ## class (game_state/net), not here.
 
-enum Kind { STRYTIUM_ORE, STRYTIUM_FUEL, FOOD, WATER, MATERIAL }
+enum Kind { STRYTIUM_ORE, STRYTIUM_FUEL, FOOD, WATER, MATERIALS, SECURITY_TEAMS }
 
 signal amount_changed(kind: Kind, new_amount: int)
 

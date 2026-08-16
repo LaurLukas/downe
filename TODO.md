@@ -29,29 +29,50 @@ None of this has real game content yet — it's plumbing. A game cannot
 actually be run with what exists today: there's no starting fleet, no star
 systems, no shuttles, no Wolf Attack data.
 
-## Blocked — need your answers before any code gets written
+## Answered
 
-These came up while reading `downe_shuttle_implementation_prompt.md`; it
-already says "ask, do not guess" and I'm holding to that:
+From `downe_shuttle_implementation_prompt.md`'s open questions:
 
-- [ ] **Mining operations**: does one operation yield *both* the 1d6
-      materials and the 3d6 strytium ore, or does the operator pick one?
-- [ ] **Cargo/hold capacities**: per-craft resource caps and starting
-      loadouts aren't recorded anywhere yet.
-- [ ] **`ally` and `wobbly` home ship**: both operated by the Joint
-      Engineering Union Engineer, starting dock unspecified.
-- [ ] **`endeavour` and `maliades` home bay**: not stated in the brief.
+- [x] **Mining operations**: the operator picks one (materials or ore) per
+      operation, and gets 2 operations per turn (3 if `requires_fuel`),
+      choosing independently each time.
+- [x] **Cargo/hold capacities**: per-ship starting resources are in
+      `resources.md`. Caps themselves are *still* unspecified there too —
+      treat as uncapped (`-1` placeholder) for now, as the brief already
+      suggested.
+- [x] **`ally` and `wobbly` home ship**: `ally` → Quellon, `wobbly` →
+      Shepherd.
+- [x] **`endeavour` and `maliades` home bay**: Endeavour → Shepherd,
+      Maliades → Dione.
 
-Same category, not yet asked, needed before the corresponding systems can
-be built:
+Also resolved along the way:
+
+- [x] **`material` vs `materials` naming**: standardized on **materials**
+      (plural) — matches the printed sheets and `resources.md`. Renamed
+      `ResourceStock.Kind.MATERIAL` → `MATERIALS` and fixed CLAUDE.md's
+      glossary line to match (commit pending).
+
+## Newly available — `resources.md`
+
+An untracked `resources.md` already in the repo (from the *DoWNE
+Facilitator Guide v1.0.1*, p.5) covers most of "starting fleet setup":
+
+- Per-ship starting resources (ore/fuel/food/water/materials) and
+  security-team counts, machine-readable as a `STARTING_RESOURCES` dict.
+- Starting survivor population per ship (the evacuation ceiling — crew/
+  passenger capacity numbers on the sheets are flavor only, not enforced).
+- Starting unrest: every ship begins at 0; 8+ calls the facilitator
+  (mutiny) — not modeled anywhere in `core/` yet.
+- Explicitly flags what's still *not* in the source: shuttle starting
+  cargo/caps, ship hold caps, starting console state, starting fighter
+  counts. Same "treat as uncapped / assume empty, confirm before
+  playtest" posture as the open questions above.
+
+## Blocked — still need answers
 
 - [ ] **Star systems**: the lettered roster (A, B, C…), descriptions, and
       away-mission opportunities (skill + difficulty) — `StarSystem` and
       `AwayMissionOpportunity` exist as empty containers with no data.
-- [ ] **Starting fleet setup**: each ship's starting consoles, resource
-      loadout, and capacities. Nothing currently populates a fresh
-      `GameState` with the real scenario — `add_ship()` has to be called
-      manually per ship with no seed data behind it.
 - [ ] **Wolf Attack data**: Wolf ship roster, attack-strength scaling off
       the pursuit track, battle-table numbers. Only the pursuit track
       itself (0–10, rise/fall) exists; nothing about what an attack does.
@@ -63,11 +84,63 @@ be built:
       Maintenance Step 6" — implying Team Phase has an internal step
       sequence the host needs to be walked through. `TurnManager` currently
       only has two flat phases, no steps.
+- [ ] **Unrest**: `resources.md` establishes starting unrest (0) and the
+      mutiny threshold (8+) but nothing in `core/` tracks it yet — no
+      `Ship.unrest` field, no rules for what raises/lowers it.
+
+None of these block the craft/shuttle system below — they block star
+systems, Wolf Attacks, secret-info phone pages, and a stepped Team Phase
+respectively.
+
+**Update**: three more source documents landed in the repo since the above
+was written (`open_questions_answered.md`, `ships.md`) and resolve nearly
+all of it in full detail — star system topology + away mission data, full
+console rosters, Wolf Attack ship roster/scaling/battle tables, the
+complete suspicion/secret-info system, and the Team Phase step sequence.
+These are now "answered, ready to build" rather than "blocked" - each
+still has a couple of source-level open items called out inline (e.g. the
+unlabelled −5 pursuit band, the FG-vs-printed-card suspicion values for
+Universal Arbourage/Android). See those two files directly rather than
+this summary when starting each system - they're thorough.
+
+New from `ships.md`: a third vessel class, **Small Ships** (`gorgoneion`,
+`capybara`, `warrior`, `vulcan`, `voyage_33_0`) - 5 optional/crisis
+vessels, own population/unrest, own console set, but *cannot take
+damage* and must dock with one of the 6 core ships every Team Phase and
+Wolf Attack. Not part of the base starting fleet (`resources.md` and the
+"only craft" decision above both confirm the base fleet is exactly the 6
+core ships). Tracked as its own future system, not folded into
+`FleetSetup` or the craft/shuttle system.
+
+## Done — starting fleet setup
+
+- [x] `core/fleet_setup.gd` — builds a fresh `GameState`'s 6 ships from
+      `resources.md`'s starting resources/security teams/population, and
+      the console roster from `open_questions_answered.md` §2.2 /
+      cross-validated against `ships.md`. Unrest starts at 0. Consoles
+      start undamaged and uncharged.
+- [x] Wired into `ui/main.gd` — a fresh run now starts with the real
+      fleet instead of an empty `GameState`. Verified end-to-end: booted
+      the real app headlessly and confirmed via HTTP that it serves.
+- [x] `Ship.unrest` field added (just the counter — no rules for what
+      raises/lowers it yet, that's still open, see Blocked above).
+- [x] `Console.charged` field added (was missing entirely — needed to
+      represent "uncharged" at setup).
+- [x] `ResourceStock.Kind.SECURITY_TEAMS` added (was missing — security
+      teams are a transferable resource per the shuttle brief).
+- [x] Fixed a real ship/craft naming collision found along the way:
+      `ShipRegistry` used to list 9 "ships" (including Endeavour,
+      Maliades, Pallas), but those three are craft names, not ships —
+      confirmed with you. `ShipRegistry`, `CLAUDE.md`'s Ships table, and
+      `web/app.js`'s mirrored ship list are all fixed to the real 6.
+
+This was a prerequisite for the craft system below (shuttles need real
+ships to dock at) and is now satisfied.
 
 ## Next up — core/craft system (fully specified, ready to build)
 
-Per `downe_shuttle_implementation_prompt.md`, once the 4 open questions above
-are answered:
+Per `downe_shuttle_implementation_prompt.md` — all 4 of its open questions
+are now answered above, so this is unblocked:
 
 - [ ] `core/craft/craft_definitions.gd` — static roster (14 shuttles + 3
       fighter wings) as data, not per-craft classes.

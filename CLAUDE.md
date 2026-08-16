@@ -123,7 +123,7 @@ Write a test in `res://tests/` for any change to `core/`.
 ## Domain glossary
 
 - **Turn** — one Team Phase (5 min) + one Coordination Phase (15 min). 6–8 per game.
-- **Resources** — strytium ore, strytium fuel, food, water, material. Cannot move
+- **Resources** — strytium ore, strytium fuel, food, water, materials. Cannot move
   between ships without an appropriate shuttle.
 - **Pursuit Track** — 0–10. Rises over time, falls on jumps away from Wolf space.
   Reaching 10 ends the game in failure. Drives Wolf attack strength.
@@ -138,13 +138,25 @@ Write a test in `res://tests/` for any change to `core/`.
 
 ## Ships
 
+Six capital ships, each with its own resource pool - the only ships with
+independent resources (see `resources.md`). "Endeavour", "Maliades", and
+"Pallas" are craft names, not ships - see the Craft section below.
+
 | Ship | Supplies | Notes |
 |---|---|---|
-| AEGIS | Military | Fighter Wings Alpha & Bravo, Starlight scout shuttle, assault shuttle |
+| AEGIS | Military | Fighter Wings Alpha & Bravo, two shuttle bays |
 | Dione | — | Carries the Interstellar Council President and many survivors |
 | Icebreaker | Materials, ore | |
-| Shepherd | Food | Has a Scientist who can scout |
-| Quellon | Water, upgrades | Has an Explorer who can scout |
+| Shepherd | Food | Docks the Endeavour (Scientist's scout) |
+| Quellon | Water, upgrades | Docks the Hummingbird (Explorer's scout) |
 | Refinery 124 | Strytium fuel | |
-| Endeavour | — | Research lab, science devices |
-| Maliades, Pallas | — | Additional ships |
+
+## Craft
+
+Fourteen shuttles and three fighter wings, each docked at one of the six
+ships above and operated by a named role. Not yet built in `core/` - see
+`downe_shuttle_implementation_prompt.md` for the full roster, shared
+ability system, and combat profiles. Of note: Endeavour (Shepherd's
+scout), Maliades (Dione's escort fighter), and Pallas (AEGIS's assault
+shuttle) share names with nothing else in the game - they are craft, not
+ships, despite an earlier pass at this file listing them as such.
