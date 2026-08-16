@@ -137,39 +137,61 @@ core ships). Tracked as its own future system, not folded into
 This was a prerequisite for the craft system below (shuttles need real
 ships to dock at) and is now satisfied.
 
-## Next up — core/craft system (fully specified, ready to build)
+## Done — core/craft system
 
-Per `downe_shuttle_implementation_prompt.md` — all 4 of its open questions
-are now answered above, so this is unblocked:
+- [x] `core/craft/craft_definitions.gd` — the full roster (14 shuttles + 3
+      fighter wings) as data via `CraftDefinition.from_dict()`, not
+      per-craft classes. `ally`/`wobbly`/`endeavour`/`maliades` home ships
+      match the resolved open questions.
+- [x] `core/craft/craft_state.gd` + `craft_setup.gd` — per-craft mutable
+      state (docked ship, fuelled, cargo `ResourceStock`, combat damage,
+      fighter count, scout report, generic per-turn use counter), seeded
+      for all 17 craft, docked at home ship, empty/unfuelled (per
+      `resources.md`'s recommendation), fighter wings full at 4
+      (unconfirmed default — flagged there too).
+- [x] `core/craft/ability.gd` + `ability_check.gd` + `ability_result.gd` +
+      `ability_registry.gd` + `core/craft/abilities/*.gd` — all 12
+      abilities (`cargo_transfer`, `boarding_support[_elite]`, `redeploy`,
+      `repair`, `recharge`, `scout_system`, `console_upgrade`,
+      `mining_operations`, `resource_harvesting`, `away_mission`,
+      `combat_table`), each with `can_execute()`/`execute()`. All
+      randomness rolls against `GameState.rng` (seeded, exposed in
+      `to_dict()`), never global `randi()`.
+- [x] `GameState._on_phase_changed()` clears console charge and craft
+      fuel/per-turn uses on every new Team Phase.
+- [x] `core/craft/storage_damage.gd` — Storage-console-damage halving,
+      including docked shuttles' cargo, with the exact rounding rule
+      (5 → 3) tested.
+- [x] `combat_table` ability — Maliades/Highwall/fighter-wing profiles as
+      dice-roll arithmetic only, never an automated resolver. Fighter
+      wings check their home ship's Fighter Bay console is charged and
+      undamaged before they can join combat, but not for away missions.
+- [x] 9 test files, 21 test files total in the suite, all passing —
+      covers every case the brief's §6 asked for by name (fuel clearing,
+      `requires_fuel` rejection reasons, repair cost/caps, consent-gated
+      console damage, storage halving at value 5, cargo-type rejection,
+      fighter launch preconditions, Maliades destroyed at exactly 3
+      damage, table-driven ability-id resolution) plus per-ability
+      coverage beyond that list.
+- [x] Wired into `ui/main.gd`; verified end-to-end with the real app
+      booted headlessly over HTTP.
 
-- [ ] `core/craft/craft_definitions.gd` — static roster (14 shuttles + 3
-      fighter wings) as data, not per-craft classes.
-- [ ] `core/craft/craft_state.gd` — per-craft mutable state (fuelled,
-      docked ship, damage track, fighter count, cargo contents).
-- [ ] `core/craft/ability_registry.gd` + `core/craft/abilities/*.gd` — one
-      file per ability (`cargo_transfer`, `boarding_support`,
-      `boarding_support_elite`, `redeploy`, `repair`, `recharge`,
-      `scout_system`, `console_upgrade`, `mining_operations`,
-      `resource_harvesting`, `away_mission`, `combat_table`), each with
-      `can_execute()` (returns a reason on failure) and `execute()`.
-      Abilities take a seeded RNG from `GameState`, never call `randi()`
-      directly, so games are reproducible from the JSON dump.
-- [ ] Fuel-clears-at-end-of-turn, wired into `TurnManager`'s phase
-      advancement.
-- [ ] Storage-console-damage resource halving (including docked shuttles),
-      with the specific rounding rule from the brief tested at value 5.
-- [ ] Combat profiles (Maliades, Highwall, fighter wings) as reference
-      data + arithmetic helpers only — no automated resolver (constraint 3
-      still applies: Wolf Attacks stay a physical gathering).
-- [ ] Host-override setters for every value this layer owns (fuel flag,
-      docking, fighter count, Maliades damage, cargo contents), per
-      constraint 5.
-- [ ] The test list already specified in the brief's §6 (fuel clearing,
-      `requires_fuel` rejection reasons, repair costs/caps, consent-gated
-      console damage, storage halving, cargo-type rejection, fighter
-      launch preconditions, Maliades destruction at exactly 3 damage, and
-      a table-driven test that every craft's declared ability IDs resolve
-      against the registry).
+**Deliberately deferred, not silently skipped:**
+- `console_upgrade`'s materials cost — no source document gives the
+  actual per-box cost, only that the track has 5 boxes (4 on Dione's VIP
+  Lounge). Increments `Console.upgrade_level`, charges nothing. Flagged
+  loudly in the ability's own file comment.
+- `recharge`'s "consoles with an immediate maintenance-cycle effect
+  trigger now instead" — sets `Console.charged = true` only; no console
+  effect is implemented yet for any console (that's the Maintenance
+  Cycle system, still blocked below).
+- Maliades' and fighter wings' medium-range "shift a Wolf ship's target
+  number" option, and Maliades' Shuttle-Bay repair-on-fuel — both need a
+  Wolf ship model that doesn't exist yet (see Blocked, above).
+- `repair`'s "2 consoles on 1 ship, 2 ships when fuelled" — implemented
+  as literally that (not required to be the *same* ship across calls);
+  not cross-checked against a source example, since the brief didn't
+  flag this one as ambiguous.
 
 ## Backlog — plumbing gaps in what's already scaffolded
 

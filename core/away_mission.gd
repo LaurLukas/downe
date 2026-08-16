@@ -6,7 +6,7 @@ extends RefCounted
 ## cards have been assigned. Never pick or assign cards here.
 ## See CLAUDE.md constraint 2.
 
-enum Skill { MINING, SALVAGE, SCIENCE, ENGINEERING, SEARCH_RESCUE }
+enum Skill { EXPLORATION, MINING, SALVAGE, SCIENCE, ENGINEERING, SEARCH_AND_RESCUE }
 
 var skill: Skill
 var difficulty: int
