@@ -51,3 +51,11 @@ func to_dict() -> Dictionary:
 		"upgrade_level": upgrade_level,
 		"charged": charged,
 	}
+
+## Applies a to_dict()-shaped dict onto this console in place - see
+## ResourceStock.load_from_dict() for why callers use this instead of a
+## static from_dict() that would return a fresh, unwired instance.
+func load_from_dict(data: Dictionary) -> void:
+	state = State[data.get("state", "OK")]
+	upgrade_level = int(data.get("upgrade_level", 0))
+	charged = bool(data.get("charged", false))

@@ -10,6 +10,12 @@
 // checked against real star system data, here or on the server. No
 // CDN or external service - this has to work with no internet access.
 
+// Mirrors ui/main.gd's WS_LISTEN_PORT - keep these two in sync. The
+// server listens for WebSocket upgrades on a separate port from the
+// one this page was served from (see net/server.gd's comment on why
+// one port can't do both).
+const WS_PORT = 8081;
+
 // Mirrors core/ship_registry.gd - keep these two lists in sync.
 const SHIPS = [
 	["aegis", "AEGIS"],
@@ -47,7 +53,7 @@ function send(type, fields) {
 }
 
 function connect() {
-	socket = new WebSocket(`ws://${window.location.host}/`);
+	socket = new WebSocket(`ws://${window.location.hostname}:${WS_PORT}/`);
 
 	socket.addEventListener("open", () => setStatus("connected", "status-connected"));
 	socket.addEventListener("close", () => {

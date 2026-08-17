@@ -87,9 +87,20 @@ access**. Never add a runtime dependency on an external service or CDN.
 
 ### Networking
 
-- One `TCPServer`. Sniff the request: `Upgrade: websocket` → `WebSocketPeer.accept_stream()`,
-  otherwise serve a static file from `res://web/`.
-- Set `write_mode = WebSocketPeer.WRITE_MODE_TEXT` so browsers receive strings.
+- Two `TCPServer`s on two ports: one serves static files from `res://web/`, the
+  other only accepts WebSocket upgrades (`WebSocketPeer.accept_stream()`). This
+  used to be one port with the request sniffed for `Upgrade: websocket` - that
+  doesn't work, because reading a connection's opening bytes to sniff them
+  consumes those bytes, and `accept_stream()` then has nothing left to read the
+  handshake from. `StreamPeerTCP` has no peek-without-consuming and
+  `accept_stream()` has no way to accept pre-read bytes, so there's no way to
+  sniff-then-handshake on one port. See `net/server.gd`'s file comment.
+- ESP32 firmware and `web/app.js` both need to know both ports (the page's HTTP
+  port and the separate WebSocket port), not just one.
+- Send with `WebSocketPeer.send_text()`, not `send()`/`put_packet()`, so browsers
+  receive string frames. (Older Godot 4.x had a `write_mode` property for this;
+  it's gone as of the engine version this project targets - `send_text()` is a
+  first-class method now.)
 - **Do not use Godot's high-level multiplayer / RPC.** Clients are ESP32s and
   browsers, not Godot peers.
 - Messages are flat JSON with a `type` field. Keep payloads small — the ESP32s

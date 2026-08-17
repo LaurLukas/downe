@@ -3,14 +3,42 @@
 [ext_resource type="Script" path="res://ui/tv/tv_display.gd" id="1"]
 
 [node name="TVDisplay" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
 script = ExtResource("1")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="Root" type="VBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
 
-[node name="TurnLabel" type="Label" parent="VBoxContainer"]
+[node name="TurnLabel" type="Label" parent="Root"]
 unique_name_in_owner = true
 text = "Turn 1 - Team Phase"
 
-[node name="PursuitLabel" type="Label" parent="VBoxContainer"]
+[node name="PursuitLabel" type="Label" parent="Root"]
 unique_name_in_owner = true
 text = "[----------] 0/10"
+
+[node name="Body" type="HBoxContainer" parent="Root"]
+size_flags_vertical = 3
+
+[node name="FleetPanel" type="VBoxContainer" parent="Root/Body"]
+size_flags_horizontal = 3
+
+[node name="FleetLabel" type="Label" parent="Root/Body/FleetPanel"]
+text = "Fleet Status"
+
+[node name="FleetList" type="VBoxContainer" parent="Root/Body/FleetPanel"]
+unique_name_in_owner = true
+
+[node name="AnnouncementsPanel" type="VBoxContainer" parent="Root/Body"]
+custom_minimum_size = Vector2(560, 0)
+
+[node name="AnnouncementsLabel" type="Label" parent="Root/Body/AnnouncementsPanel"]
+text = "Announcements"
+
+[node name="AnnouncementsScroll" type="ScrollContainer" parent="Root/Body/AnnouncementsPanel"]
+size_flags_vertical = 3
+
+[node name="AnnouncementsList" type="VBoxContainer" parent="Root/Body/AnnouncementsPanel/AnnouncementsScroll"]
+unique_name_in_owner = true

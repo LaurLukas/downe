@@ -195,22 +195,177 @@ ships to dock at) and is now satisfied.
 
 ## Backlog — plumbing gaps in what's already scaffolded
 
-- [ ] **Broadcast wiring**: `NetServer.send()`/`broadcast()` exist but
-      nothing calls them — connected web/ESP32 clients never get pushed
-      state updates when someone else mutates `GameState`. Right now the
-      web terminal is fire-and-forget only.
-- [ ] **Crash-recovery rehydration**: `Persistence.load_dict()` exists but
-      nothing turns that dict back into a live `GameState` on startup —
-      `main.gd` doesn't call it. Needs a `GameState.from_dict()`
-      (`Ship.from_dict()`, etc.) counterpart to `to_dict()`.
-- [ ] **Host console completeness**: only pursuit track and turn phase
-      have override controls right now. Per-ship resource/console editing,
-      direct jump-coordinate override, and (once it exists) craft admin
-      controls are all missing — most state still has no host bypass path,
-      which is a direct gap against constraint 5.
-- [ ] **TV display completeness**: currently just a turn/phase line and a
-      text pursuit bar. No ship status overview, no Wolf Attack support
-      screen, no jump/scout announcement feed.
+- [x] **Broadcast wiring**: `ui/main.gd` now pushes a `{"type": "state",
+      "state": GameState.to_dict()}` message to every connected client on
+      every `GameState.mutated`, and to a client individually the moment
+      it connects (`NetServer.client_connected`). Simplest-correct
+      choice: full-state dump every time, matching `Persistence`'s
+      already-established "dump everything, every mutation" pattern
+      rather than diffing. Revisit only if ESP32 payload size becomes a
+      real problem (CLAUDE.md's Networking section).
+
+      Getting here surfaced three pre-existing bugs, all fixed:
+      - `GameState.mutated` only ever fired on `add_ship`/`add_craft`/
+        `add_star_system` — not on anything that happens *after* setup
+        (jump coordinates, drive charge, resources, console state,
+        pursuit track, turn/phase advance). `Persistence`'s autosave was
+        silently stale this whole time. Fixed by giving `Ship` and
+        `CraftState` a `changed` signal that bubbles up everything nested
+        under them (including `ResourceStock`/`Console`), and having
+        `GameState` connect to it in `add_ship`/`add_craft`, plus
+        `pursuit_track.changed` and `turn_manager.phase_changed`
+        directly. Covered by `tests/core/game_state_mutated_test.gd`.
+      - `NetServer` set `WebSocketPeer.write_mode` on every accepted
+        connection - a property that no longer exists on this project's
+        Godot version (`send_text()` replaced it). Every websocket accept
+        threw and aborted before `accept_stream()` ran, so **no ESP32 or
+        browser client has ever been able to open a socket** through this
+        server. Confirmed via `ClassDB` introspection, not guessed.
+      - Fixing that exposed a second bug: sniffing one TCP port for
+        `Upgrade: websocket` requires reading the connection's opening
+        bytes, which consumes them - `WebSocketPeer.accept_stream()` then
+        has nothing left to read the handshake from and hangs in
+        `STATE_CONNECTING` forever. `StreamPeerTCP` has no
+        peek-without-consuming and `accept_stream()` has no way to accept
+        pre-read bytes, so one port can't do both jobs. Resolved (user's
+        call, see chat) by splitting into two `TCPServer`s - one for
+        static files, one dedicated to WebSocket upgrades, so
+        `accept_stream()` always gets a fresh, untouched connection. New
+        port: `ui/main.gd`'s `WS_LISTEN_PORT` (8081, alongside
+        `HTTP_LISTEN_PORT` 8080); `web/app.js` and any ESP32 firmware
+        need both. CLAUDE.md's Networking section and `net/server.gd`'s
+        file comment cover the why in full; `tests/net/server_test.gd`
+        now exercises real loopback sockets end-to-end (handshake,
+        message routing, `client_connected`, `broadcast()`) instead of
+        only the pure helper methods, since that's exactly the layer
+        where this hid.
+
+      Not yet done: the web terminal client only *sends* — it doesn't
+      render anything from the `"state"` pushes it now receives. That's
+      real UI work, out of scope here; flagged under "Player phone
+      pages" below since the ship terminal needs the same treatment.
+- [x] **Crash-recovery rehydration**: `GameState.from_dict()` +
+      `Ship.from_dict()` + `CraftState.from_dict()` (counterparts to
+      `to_dict()`), plus `load_from_dict()` on `ResourceStock`,
+      `Console`, and `PursuitTrack`. `ui/main.gd`'s `_init()` now calls
+      `Persistence.load_dict()` first and rehydrates from it when
+      non-empty, falling back to `FleetSetup`/`CraftSetup` only for a
+      genuinely fresh run.
+
+      Two things worth knowing if you touch this again:
+      - `Ship.from_dict()`/`CraftState.from_dict()` load values *onto*
+        the `ResourceStock`/`Console` objects `_init()`/`add_console()`
+        already created and wired for `changed`-bubbling (see the
+        Broadcast wiring entry above), rather than building fresh
+        replacement objects — a fresh `ResourceStock.new()` here would
+        be unwired from `Ship.changed`, and mutating a rehydrated ship
+        post-load would silently stop reaching `GameState.mutated` (would
+        break both autosave and broadcast for the rest of that game).
+        That's why `ResourceStock`/`Console` got `load_from_dict()`
+        instance methods instead of static `from_dict()` constructors.
+      - `GameState.from_dict()` restores `turn_manager` *before* adding
+        any ship/craft, deliberately — `TurnManager.force_set()` emits
+        `phase_changed` the same as `advance()` does, which
+        `GameState._on_phase_changed()` reacts to by clearing console
+        charge and craft fuel/uses on every new Team Phase. Restoring
+        turn/phase while `ships`/`craft` are still empty makes that a
+        no-op instead of wiping the very state being loaded. Caught by
+        `test_loading_a_team_phase_save_does_not_wipe_the_state_it_just_loaded`
+        in `tests/core/game_state_persistence_test.gd` before it ever
+        became a real bug.
+
+      Verified two ways: the full round-trip test file above (data
+      round-trips, and rehydrated objects still bubble to `mutated`),
+      and manually against the real running app — mutated a ship over
+      its actual websocket, confirmed the autosave, killed the process,
+      restarted it, and confirmed the mutation came back over a fresh
+      connection.
+- [x] **Host console completeness**: `ui/host/host_console.gd` now builds
+      a collapsible, editable panel per ship and per craft (17 of them),
+      covering every field `to_dict()` persists — jump coordinates,
+      drive charge, unrest, survivor population, all resource kinds, and
+      every console's state/charged/upgrade level for ships; docked
+      ship, fuelled, combat damage, fighter count, scout report, and
+      cargo for craft. All of it writes through the same setters
+      MessageRouter and the ability system already use (`Ship.
+      set_jump_coordinates()`, `Console.set_state()`, etc.), so there's
+      no separate "host" code path to keep in sync - just a UI that can
+      reach every setter core/ exposes. Closes the constraint 5 gap
+      called out here: every mutable field now has a bypass.
+
+      One thing worth knowing if you touch this again: panels are built
+      *once* in `set_game_state()`, not rebuilt on `GameState.mutated`.
+      With ~180 editable fields across 6 ships and 17 craft, and
+      `mutated` now firing on every real mutation (see Broadcast wiring
+      above), rebuilding the whole tree every time would blow away
+      whatever the host is mid-typing anywhere the instant *any* player
+      action arrives over the network - a background event tearing out
+      an in-progress edit is exactly the kind of thing that makes a host
+      stop trusting the tool mid-game. Instead, each panel refreshes its
+      displayed values from live state only when expanded (a deliberate
+      host action), plus a manual "Refresh all" button for when the host
+      wants current values without touching every panel.
+
+      Verified by instantiating the real scene headlessly and driving it
+      programmatically: expanded a ship panel, edited jump coordinates
+      and clicked Set, toggled drive charge, changed a console's state
+      via its dropdown, confirmed each wrote through to the live `Ship`/
+      `Console` object; mutated state externally and confirmed
+      re-expanding picked up the change; expanded a craft panel and
+      confirmed toggling fuelled wrote through to `CraftState`. No
+      formal test file - this project's suite doesn't instantiate `.tscn`
+      Control scenes anywhere yet, and adding that pattern felt like a
+      separate decision from this task.
+- [x] **TV display completeness (partial - 2 of 3)**: added a fleet
+      status overview (one row per ship: drive charge, jump coordinates,
+      unrest, all six resource kinds - `DisplayFormat.ship_status_line()`)
+      and a jump/scout announcement feed. Both rebuild freely on every
+      `GameState.mutated`, unlike HostConsole's refresh-on-expand - TV
+      display has no editable input a rebuild could interrupt, since it
+      never mutates state (see its own file comment).
+
+      New: `core/announcement_log.gd` (`AnnouncementLog`) - a capped,
+      newest-first log GameState wires directly to `Ship.
+      jump_coordinates_set` and `CraftState.scout_report_set` in
+      `add_ship()`/`add_craft()`, so anything that calls those setters
+      (a player's phone, the host console's override, a future ESP32
+      message handler) gets logged automatically with no separate
+      "announce this" call site to remember. Persisted in
+      `GameState.to_dict()`/`from_dict()` like everything else, so the
+      feed survives a crash-recovery restart. Deliberately dumb: logs
+      exactly what was typed, never validated against real star system
+      data - same trust model as constraint 1, extended to the display
+      layer instead of just the input layer.
+
+      **Not done - Wolf Attack support screen**: still blocked on a Wolf
+      ship roster / attack-strength / battle-table model that doesn't
+      exist anywhere in `core/` yet (`ships.md`/
+      `open_questions_answered.md` have the source data, per the Blocked
+      section above, but nothing's been built from it). Building a
+      screen for data that doesn't exist would mean inventing combat
+      rules rather than displaying real ones - that's a `core/` system
+      of its own, not a TV display task. Left as a follow-up.
+
+      Bug found and fixed along the way: the rebuild pattern (clear old
+      rows, add new ones, same function call) used `queue_free()`, which
+      defers removal to end-of-frame - the old and new rows briefly
+      coexisted as siblings until cleanup ran. Never visible in the
+      compiled game (rendering happens after deferred frees resolve),
+      but it broke a same-frame verification script that inspected the
+      tree right after triggering a mutation, which is how it was
+      caught. Switched to `free()` (immediate) in both `TVDisplay`
+      rebuild methods.
+
+      Verified by instantiating the real scene headlessly: 6 ships
+      render one row each; mutating a ship's drive charge and jump
+      coordinates updates its row without a manual refresh; setting
+      jump coordinates and a scout report each produce an announcement,
+      newest first, with the right ship/craft display name. New
+      `DisplayFormat` functions (`resource_summary`, `ship_status_line`,
+      `announcement_line`) are pure and covered in
+      `tests/ui/display_format_test.gd`; `AnnouncementLog` itself and
+      its `GameState` wiring are covered in
+      `tests/core/announcement_log_test.gd`.
 - [ ] **Deployment**: no export preset configured; no plan yet for how the
       12 ESP32 terminals discover the host's IP on the GL.iNet router
       (static IP? mDNS?). ESP32 firmware itself is out-of-repo work in a

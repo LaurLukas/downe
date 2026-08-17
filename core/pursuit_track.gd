@@ -28,3 +28,6 @@ func set_value(new_value: int) -> void:
 
 func to_dict() -> Dictionary:
 	return {"value": value}
+
+func load_from_dict(data: Dictionary) -> void:
+	set_value(int(data.get("value", MIN_VALUE)))

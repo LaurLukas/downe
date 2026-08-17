@@ -5,6 +5,12 @@ signal jump_coordinates_set(text: String)
 signal drive_charge_changed(charged: bool)
 signal unrest_changed(new_unrest: int)
 
+## Fires on any change to this ship or anything docked in it - resources,
+## consoles, jump coordinates, drive charge, unrest. GameState listens to
+## this per-ship so it knows when to emit its own mutated signal, rather
+## than every caller having to remember to notify GameState directly.
+signal changed()
+
 var id: String
 var resources: ResourceStock
 var consoles: Dictionary[String, Console] = {}
@@ -26,10 +32,17 @@ func _init(ship_id: String, scout_capable: bool = false) -> void:
 	id = ship_id
 	can_scout = scout_capable
 	resources = ResourceStock.new()
+	resources.amount_changed.connect(func(_kind: ResourceStock.Kind, _amount: int) -> void: changed.emit())
+	jump_coordinates_set.connect(func(_text: String) -> void: changed.emit())
+	drive_charge_changed.connect(func(_charged: bool) -> void: changed.emit())
+	unrest_changed.connect(func(_new_unrest: int) -> void: changed.emit())
 
 func add_console(console_id: String) -> Console:
 	var console := Console.new(console_id)
 	consoles[console_id] = console
+	console.state_changed.connect(func(_new_state: Console.State) -> void: changed.emit())
+	console.upgrade_changed.connect(func(_new_level: int) -> void: changed.emit())
+	console.charged_changed.connect(func(_is_charged: bool) -> void: changed.emit())
 	return console
 
 func get_console(console_id: String) -> Console:
@@ -65,3 +78,23 @@ func to_dict() -> Dictionary:
 		"resources": resources.to_dict(),
 		"consoles": console_dict,
 	}
+
+## Rebuilds a Ship from a to_dict()-shaped dict (Persistence's saved
+## state). Loads resources/consoles onto the objects add_console() and
+## _init() already created and wired for changed-bubbling, rather than
+## replacing them wholesale - a fresh ResourceStock or Console here
+## would be unwired from Ship.changed, and mutating a rehydrated ship
+## post-load would silently stop reaching GameState.mutated. See
+## GameState.from_dict().
+static func from_dict(data: Dictionary) -> Ship:
+	var ship := Ship.new(data.get("id", ""), bool(data.get("can_scout", false)))
+	ship.drive_charged = bool(data.get("drive_charged", false))
+	ship.jump_coordinates = String(data.get("jump_coordinates", ""))
+	ship.unrest = int(data.get("unrest", 0))
+	ship.survivor_population = int(data.get("survivor_population", 0))
+	ship.max_survivor_population = int(data.get("max_survivor_population", 0))
+	ship.resources.load_from_dict(data.get("resources", {}))
+	var console_dict: Dictionary = data.get("consoles", {})
+	for console_id: String in console_dict:
+		ship.add_console(console_id).load_from_dict(console_dict[console_id])
+	return ship

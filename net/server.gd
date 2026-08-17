@@ -1,60 +1,76 @@
 class_name NetServer
 extends Node
 
-## One TCPServer for everything: ESP32 terminals, phones, and the
-## browser terminal client. Sniffs each new connection's opening
-## bytes - "Upgrade: websocket" gets WebSocketPeer.accept_stream(),
-## anything else gets a static file from res://web/. Do not use
-## Godot's high-level multiplayer/RPC here; these are not Godot peers.
-## See CLAUDE.md's Networking section.
+## Two TCPServers: one serves static files from res://web/, the other
+## accepts only WebSocket upgrades for ESP32 terminals, phones, and the
+## browser terminal client. Do not use Godot's high-level
+## multiplayer/RPC here; these are not Godot peers. See CLAUDE.md's
+## Networking section.
+##
+## This used to be one port with the opening bytes of each connection
+## sniffed for "Upgrade: websocket" to route it. That doesn't work:
+## reading those bytes to sniff them consumes them, and
+## WebSocketPeer.accept_stream() then has nothing left to read the
+## handshake from - the connection hangs in STATE_CONNECTING forever.
+## StreamPeerTCP has no way to peek without consuming, and
+## accept_stream() has no way to accept pre-read bytes. Splitting into
+## two ports sidesteps the problem entirely: accept_stream() always
+## gets a fresh, untouched connection.
 
 signal client_connected(peer_id: int)
 signal client_disconnected(peer_id: int)
 signal message_received(peer_id: int, message: Dictionary)
 
-var _tcp_server := TCPServer.new()
-var _pending: Array[StreamPeerTCP] = []
+var _http_server := TCPServer.new()
+var _ws_server := TCPServer.new()
+var _pending_http: Array[StreamPeerTCP] = []
 var _sockets: Dictionary[int, WebSocketPeer] = {}
+## Peer ids whose handshake has reached STATE_OPEN and had
+## client_connected emitted for them - see _poll_sockets(). Needed
+## because accept_stream() only starts the handshake; a peer isn't
+## really "connected" (able to receive a send()) until the socket
+## reports STATE_OPEN, which takes a few more polls.
+var _handshake_complete: Dictionary[int, bool] = {}
 var _next_peer_id: int = 1
 
-func start(listen_port: int) -> Error:
-	return _tcp_server.listen(listen_port)
+func start(http_port: int, ws_port: int) -> Error:
+	var err := _http_server.listen(http_port)
+	if err != OK:
+		return err
+	return _ws_server.listen(ws_port)
 
 func stop() -> void:
-	_tcp_server.stop()
+	_http_server.stop()
+	_ws_server.stop()
 	for peer_id: int in _sockets:
 		_sockets[peer_id].close()
 	_sockets.clear()
-	_pending.clear()
+	_handshake_complete.clear()
+	_pending_http.clear()
 
 func _process(_delta: float) -> void:
-	while _tcp_server.is_connection_available():
-		_pending.append(_tcp_server.take_connection())
-	_poll_pending()
+	while _ws_server.is_connection_available():
+		_accept_websocket(_ws_server.take_connection())
+
+	while _http_server.is_connection_available():
+		_pending_http.append(_http_server.take_connection())
+	_poll_pending_http()
 	_poll_sockets()
 
-func _poll_pending() -> void:
+func _poll_pending_http() -> void:
 	var still_pending: Array[StreamPeerTCP] = []
-	for connection in _pending:
+	for connection in _pending_http:
 		connection.poll()
 		if connection.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 			continue
 		if connection.get_available_bytes() <= 0:
 			still_pending.append(connection)
 		else:
-			_handle_new_connection(connection)
-	_pending = still_pending
-
-func _handle_new_connection(connection: StreamPeerTCP) -> void:
-	var request := connection.get_utf8_string(connection.get_available_bytes())
-	if request.findn("Upgrade: websocket") != -1:
-		_accept_websocket(connection)
-	else:
-		_serve_static_file(connection, request)
+			_serve_static_file(connection, connection.get_utf8_string(connection.get_available_bytes()))
+	_pending_http = still_pending
 
 func _accept_websocket(connection: StreamPeerTCP) -> void:
 	var socket := WebSocketPeer.new()
-	socket.write_mode = WebSocketPeer.WRITE_MODE_TEXT
 	var err := socket.accept_stream(connection)
 	if err != OK:
 		push_error("NetServer: failed to accept websocket stream (%s)" % err)
@@ -62,7 +78,6 @@ func _accept_websocket(connection: StreamPeerTCP) -> void:
 	var peer_id := _next_peer_id
 	_next_peer_id += 1
 	_sockets[peer_id] = socket
-	client_connected.emit(peer_id)
 
 func _serve_static_file(connection: StreamPeerTCP, request: String) -> void:
 	var resolved := HttpStaticFiles.resolve_path(_parse_request_path(request))
@@ -93,13 +108,19 @@ func _poll_sockets() -> void:
 		socket.poll()
 		match socket.get_ready_state():
 			WebSocketPeer.STATE_OPEN:
+				if not _handshake_complete.has(peer_id):
+					_handshake_complete[peer_id] = true
+					client_connected.emit(peer_id)
 				while socket.get_available_packet_count() > 0:
 					var message := NetMessage.decode(socket.get_packet().get_string_from_utf8())
 					if not message.is_empty():
 						message_received.emit(peer_id, message)
 			WebSocketPeer.STATE_CLOSED:
 				_sockets.erase(peer_id)
-				client_disconnected.emit(peer_id)
+				var was_connected := _handshake_complete.has(peer_id)
+				_handshake_complete.erase(peer_id)
+				if was_connected:
+					client_disconnected.emit(peer_id)
 
 func send(peer_id: int, message: Dictionary) -> void:
 	if _sockets.has(peer_id):

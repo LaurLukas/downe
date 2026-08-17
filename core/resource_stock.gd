@@ -26,3 +26,11 @@ func to_dict() -> Dictionary:
 	for kind: Kind in _amounts:
 		out[Kind.keys()[kind]] = _amounts[kind]
 	return out
+
+## Applies a to_dict()-shaped dict onto this stock in place, rather than
+## building a new ResourceStock, so callers that already hold a
+## reference wired into a parent's changed-bubbling (Ship, CraftState)
+## don't need to rewire anything to load a save. See Ship.from_dict().
+func load_from_dict(data: Dictionary) -> void:
+	for kind_name: String in data:
+		set_amount(Kind[kind_name], int(data[kind_name]))
