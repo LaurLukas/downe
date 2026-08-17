@@ -27,6 +27,9 @@ extends Control
 @onready var _refresh_button: Button = %RefreshButton
 @onready var _ship_list: VBoxContainer = %ShipList
 @onready var _craft_list: VBoxContainer = %CraftList
+@onready var _players_list: VBoxContainer = %PlayersList
+@onready var _new_player_name: LineEdit = %NewPlayerName
+@onready var _add_player_button: Button = %AddPlayerButton
 
 var game_state: GameState
 var _all_refreshers: Array[Callable] = []
@@ -37,6 +40,13 @@ const RESOURCE_KINDS: Array[ResourceStock.Kind] = [
 	ResourceStock.Kind.MATERIALS, ResourceStock.Kind.SECURITY_TEAMS,
 ]
 const CONSOLE_STATE_NAMES: Array[String] = ["OK", "DAMAGED", "DESTROYED"]
+
+## Mirrors ui/main.gd's HTTP_LISTEN_PORT - keep these two in sync. Used
+## only to build a copy-pasteable URL for each player's phone page; the
+## host still has to point ESP32s/browsers at whatever address this
+## laptop actually gets on the venue's router (see TODO.md's Deployment
+## item - IP discovery is still an open decision).
+const HTTP_LISTEN_PORT_FOR_URLS := 8080
 
 func set_game_state(state: GameState) -> void:
 	game_state = state
@@ -49,9 +59,12 @@ func set_game_state(state: GameState) -> void:
 	_force_pursuit_button.pressed.connect(_on_force_pursuit_pressed)
 	_refresh_button.pressed.connect(_on_refresh_all_pressed)
 
+	_add_player_button.pressed.connect(_on_add_player_pressed)
+
 	_refresh()
 	_build_ship_panels()
 	_build_craft_panels()
+	_build_player_panels()
 
 func _on_advance_pressed() -> void:
 	game_state.turn_manager.advance()
@@ -62,6 +75,15 @@ func _on_force_pursuit_pressed() -> void:
 func _on_refresh_all_pressed() -> void:
 	for refresh in _all_refreshers:
 		refresh.call()
+
+func _on_add_player_pressed() -> void:
+	var player_name := _new_player_name.text.strip_edges()
+	if player_name.is_empty():
+		return
+	var player := Player.new(game_state.generate_player_id(), player_name)
+	game_state.add_player(player)
+	_new_player_name.text = ""
+	_build_player_panel(player, true)
 
 func _refresh(_a: Variant = null, _b: Variant = null) -> void:
 	_turn_label.text = DisplayFormat.turn_label(game_state.turn_manager)
@@ -131,10 +153,13 @@ func _make_option_row(refreshers: Array[Callable], label_text: String, options: 
 	refreshers.append(func() -> void: option.selected = get_index.call())
 	return row
 
-## A collapsible header/body pair. body starts hidden; expanding it
-## refreshes every field in the panel from live state. Returns the
-## body container so callers can add rows to it.
-func _make_collapsible_panel(parent: VBoxContainer, title: String, refreshers: Array[Callable]) -> VBoxContainer:
+## A collapsible header/body pair. body starts hidden unless
+## start_expanded is set (used when the host just created something and
+## almost certainly wants to fill it in immediately - see
+## _on_add_player_pressed()). Expanding it refreshes every field in the
+## panel from live state. Returns the body container so callers can add
+## rows to it.
+func _make_collapsible_panel(parent: VBoxContainer, title: String, refreshers: Array[Callable], start_expanded: bool = false) -> VBoxContainer:
 	var container := VBoxContainer.new()
 	var header := Button.new()
 	header.toggle_mode = true
@@ -151,6 +176,9 @@ func _make_collapsible_panel(parent: VBoxContainer, title: String, refreshers: A
 	container.add_child(header)
 	container.add_child(body)
 	parent.add_child(container)
+	if start_expanded:
+		header.button_pressed = true
+		header.toggled.emit(true)
 	return body
 
 ## --- ship panels ------------------------------------------------------
@@ -214,3 +242,118 @@ func _build_craft_panel(craft_state: CraftState) -> void:
 		body.add_child(_make_spinbox_row(refreshers, ResourceStock.Kind.keys()[kind], func() -> float: return craft_state.cargo.get_amount(kind), 0, 999, func(value: int) -> void: craft_state.cargo.set_amount(kind, value)))
 
 	_all_refreshers.append_array(refreshers)
+
+## --- player panels ------------------------------------------------------
+## Loyalty stays on paper (CLAUDE.md constraint 4) - this only tracks
+## what open_questions_answered.md §4.5 says a phone page carries:
+## suspicion and facilitator-issued clues. The arrest posse-size
+## calculator lives here, host-only, because FG is explicit that
+## players are told the number required and never the suspicion value
+## it's derived from (§4.3) - it must never reach a player's phone.
+
+func _build_player_panels() -> void:
+	for player_id: String in game_state.players:
+		_build_player_panel(game_state.players[player_id])
+
+func _build_player_panel(player: Player, start_expanded: bool = false) -> void:
+	var refreshers: Array[Callable] = []
+	var body := _make_collapsible_panel(_players_list, player.name, refreshers, start_expanded)
+
+	body.add_child(_make_spinbox_row(refreshers, "Suspicion", func() -> float: return player.suspicion, 0, 999, func(value: int) -> void: player.set_suspicion(value)))
+
+	var roll_row := HBoxContainer.new()
+	var roll_button := Button.new()
+	roll_button.text = "Roll 1d6 (clue table check)"
+	var roll_result := Label.new()
+	roll_result.text = ""
+	roll_row.add_child(roll_button)
+	roll_row.add_child(roll_result)
+	body.add_child(roll_row)
+
+	var posse_row := HBoxContainer.new()
+	var posse_label := Label.new()
+	posse_label.text = "Standers (players who stand up for them)"
+	posse_label.custom_minimum_size = Vector2(260, 0)
+	var posse_standers := SpinBox.new()
+	posse_standers.min_value = 0
+	posse_standers.max_value = 20
+	var posse_button := Button.new()
+	posse_button.text = "Calculate posse size (host only - never send to a player)"
+	var posse_result := Label.new()
+	posse_result.text = ""
+	posse_row.add_child(posse_label)
+	posse_row.add_child(posse_standers)
+	posse_row.add_child(posse_button)
+	posse_row.add_child(posse_result)
+	body.add_child(posse_row)
+	posse_button.pressed.connect(func() -> void:
+		posse_result.text = "Required: %d" % Player.posse_size_required(player.suspicion, int(posse_standers.value))
+	)
+	# Rolling changes suspicion, so the calculator's implicit dependency
+	# on player.suspicion can go stale the moment a roll lands - clear
+	# the last result rather than show a number that no longer matches.
+	roll_button.pressed.connect(func() -> void:
+		var roll := game_state.rng.randi_range(1, 6)
+		player.add_suspicion(roll)
+		roll_result.text = "Rolled %d - new suspicion %d" % [roll, player.suspicion]
+		posse_result.text = ""
+	)
+
+	var clues_label := Label.new()
+	clues_label.text = "Clues sent"
+	body.add_child(clues_label)
+	var clues_list := VBoxContainer.new()
+	body.add_child(clues_list)
+	var refresh_clues := func() -> void:
+		for child in clues_list.get_children():
+			child.free()
+		for clue: Dictionary in player.clues:
+			var clue_label := Label.new()
+			clue_label.text = "Turn %d: %s" % [clue.get("turn_number", 0), clue.get("text", "")]
+			clue_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+			clues_list.add_child(clue_label)
+	refreshers.append(refresh_clues)
+	refresh_clues.call()
+
+	var send_clue_row := HBoxContainer.new()
+	var clue_edit := LineEdit.new()
+	clue_edit.placeholder_text = "Clue text, sent to this player's phone verbatim"
+	clue_edit.custom_minimum_size = Vector2(320, 0)
+	var send_clue_button := Button.new()
+	send_clue_button.text = "Send Clue"
+	send_clue_row.add_child(clue_edit)
+	send_clue_row.add_child(send_clue_button)
+	body.add_child(send_clue_row)
+	send_clue_button.pressed.connect(func() -> void:
+		if clue_edit.text.strip_edges().is_empty():
+			return
+		player.add_clue(clue_edit.text, game_state.turn_manager.turn_number)
+		clue_edit.text = ""
+		refresh_clues.call()
+	)
+
+	var url_row := HBoxContainer.new()
+	var url_label := Label.new()
+	url_label.text = "Phone page"
+	url_label.custom_minimum_size = Vector2(180, 0)
+	var url_field := LineEdit.new()
+	url_field.editable = false
+	url_field.text = DisplayFormat.player_phone_url(_best_guess_local_ip(), HTTP_LISTEN_PORT_FOR_URLS, player.id)
+	url_field.custom_minimum_size = Vector2(360, 0)
+	url_row.add_child(url_label)
+	url_row.add_child(url_field)
+	body.add_child(url_row)
+
+	_all_refreshers.append_array(refreshers)
+
+## Best-effort LAN address for the URL shown above - not a claim about
+## which address ESP32s/browsers should actually use (see TODO.md's
+## Deployment item; IP discovery is still an open decision). Falls back
+## to a placeholder if nothing better is found, e.g. running with no
+## network adapter up.
+func _best_guess_local_ip() -> String:
+	for address: String in IP.get_local_addresses():
+		if address.begins_with("127.") or address.begins_with("169.254.") or address == "0.0.0.0" or address.find(":") != -1:
+			continue  # loopback, link-local/APIPA (no real network), or IPv6
+		return address
+	return "<host-ip>"

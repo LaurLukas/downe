@@ -54,6 +54,14 @@ static func ship_status_line(ship: Ship) -> String:
 	var jump := ship.jump_coordinates if not ship.jump_coordinates.is_empty() else "(none)"
 	return "Drive: %s | Jump: %s | Unrest: %d | %s" % [drive, jump, ship.unrest, resource_summary(ship.resources)]
 
+## A player's phone-page link, for the host console to display next to
+## each player so the host can build a QR code from it. host_ip is a
+## best-effort guess (HostConsole._best_guess_local_ip()) - actual IP
+## discovery for ESP32s/browsers is still an open deployment decision,
+## see TODO.md.
+static func player_phone_url(host_ip: String, http_port: int, player_id: String) -> String:
+	return "http://%s:%d/player.html?id=%s" % [host_ip, http_port, player_id]
+
 ## One line for the TV display's announcement feed. entry is an
 ## AnnouncementLog entry dict - see that class for the shape. Whatever
 ## was typed is shown verbatim, never validated - see CLAUDE.md

@@ -104,3 +104,29 @@ func test_turn_advance_emits_mutated() -> void:
 	state.turn_manager.advance()
 
 	assert_true(count[0] > 0, "advancing the turn/phase should emit mutated")
+
+func test_adding_a_player_emits_mutated() -> void:
+	var state := GameState.new()
+	var count := _count_mutations(state)
+	state.add_player(Player.new("p1", "Alex"))
+	assert_true(count[0] > 0, "adding a player should emit mutated")
+
+func test_player_suspicion_change_on_an_added_player_emits_mutated() -> void:
+	var state := GameState.new()
+	var player := Player.new("p1", "Alex")
+	state.add_player(player)
+	var count := _count_mutations(state)
+
+	player.set_suspicion(5)
+
+	assert_true(count[0] > 0, "changing an already-added player's suspicion should emit mutated")
+
+func test_player_clue_on_an_added_player_emits_mutated() -> void:
+	var state := GameState.new()
+	var player := Player.new("p1", "Alex")
+	state.add_player(player)
+	var count := _count_mutations(state)
+
+	player.add_clue("hint", 1)
+
+	assert_true(count[0] > 0, "adding a clue to an already-added player should emit mutated")

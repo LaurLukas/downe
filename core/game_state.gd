@@ -11,9 +11,25 @@ signal mutated()
 var ships: Dictionary[String, Ship] = {}
 var craft: Dictionary[String, CraftState] = {}
 var star_systems: Dictionary[String, StarSystem] = {}
+var players: Dictionary[String, Player] = {}
 var pursuit_track := PursuitTrack.new()
 var turn_manager := TurnManager.new()
 var announcement_log := AnnouncementLog.new()
+
+const _PLAYER_ID_ALPHABET := "abcdefghijklmnopqrstuvwxyz0123456789"
+
+## Player ids are embedded in that player's phone-page URL/QR code, so
+## they need to be hard to stumble onto by guessing, not just unique -
+## see HostConsole's Players section. Rolled from the same seeded rng
+## as everything else (CLAUDE.md: never randi()/randf() directly), so
+## even this is reproducible from a saved seed.
+func generate_player_id() -> String:
+	var id := ""
+	while id.is_empty() or players.has(id):
+		id = ""
+		for i in range(8):
+			id += _PLAYER_ID_ALPHABET[rng.randi_range(0, _PLAYER_ID_ALPHABET.length() - 1)]
+	return id
 
 ## Abilities and other rules that need randomness must roll against
 ## this, never call randi()/randf() directly, so a game is reproducible
@@ -47,6 +63,14 @@ func add_craft(craft_state: CraftState) -> void:
 func get_craft(craft_id: String) -> CraftState:
 	return craft.get(craft_id)
 
+func add_player(player: Player) -> void:
+	players[player.id] = player
+	player.changed.connect(mutated.emit)
+	mutated.emit()
+
+func get_player(player_id: String) -> Player:
+	return players.get(player_id)
+
 func add_star_system(system: StarSystem) -> void:
 	star_systems[system.id] = system
 	mutated.emit()
@@ -76,6 +100,9 @@ func to_dict() -> Dictionary:
 	var craft_dict := {}
 	for craft_id: String in craft:
 		craft_dict[craft_id] = craft[craft_id].to_dict()
+	var player_dict := {}
+	for player_id: String in players:
+		player_dict[player_id] = players[player_id].to_dict()
 	return {
 		"pursuit_track": pursuit_track.to_dict(),
 		"turn": turn_manager.to_dict(),
@@ -83,7 +110,26 @@ func to_dict() -> Dictionary:
 		"ships": ship_dict,
 		"craft": craft_dict,
 		"announcement_log": announcement_log.to_dict(),
+		"players": player_dict,
 	}
+
+## What gets broadcast to every connected client - everything except
+## per-player secret data (suspicion, clues). Ships/craft/pursuit/turn
+## are public knowledge in the fiction; a player's suspicion and clues
+## are not, and broadcasting them to every socket would let anyone
+## inspecting their browser's network traffic read what was meant for
+## one specific player's phone. See player_to_dict() and
+## ui/main.gd's per-player send.
+func to_public_dict() -> Dictionary:
+	var public_dict := to_dict()
+	public_dict.erase("players")
+	return public_dict
+
+## The one player-specific slice that's safe to send to that player's
+## own connection - see to_public_dict()'s comment.
+func player_to_dict(player_id: String) -> Dictionary:
+	var player := get_player(player_id)
+	return player.to_dict() if player != null else {}
 
 ## Rebuilds a GameState from Persistence.load_dict()'s output - crash
 ## recovery, so the host can restart mid-game without the room standing
@@ -114,5 +160,9 @@ static func from_dict(data: Dictionary) -> GameState:
 	var craft_dict_data: Dictionary = data.get("craft", {})
 	for craft_id: String in craft_dict_data:
 		state.add_craft(CraftState.from_dict(craft_dict_data[craft_id]))
+
+	var player_dict_data: Dictionary = data.get("players", {})
+	for player_id: String in player_dict_data:
+		state.add_player(Player.from_dict(player_dict_data[player_id]))
 
 	return state

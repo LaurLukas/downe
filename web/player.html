@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downe - Player</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+	<h1>DoWNE</h1>
+	<span id="status" class="status status-disconnected">disconnected</span>
+</header>
+
+<main>
+	<div id="no-player" class="hidden">
+		<p>No player id in this link. Ask the host for your QR code or link again.</p>
+	</div>
+
+	<div id="player-view" class="hidden">
+		<label>Suspicion</label>
+		<div id="suspicion-value" class="suspicion-value">0</div>
+		<p class="hint">This number by itself doesn't mean anything - loyal players can have high suspicion too.</p>
+
+		<label>Clues from the facilitator</label>
+		<ul id="clue-list" class="clue-list"></ul>
+		<p id="no-clues" class="hint">Nothing yet.</p>
+	</div>
+</main>
+
+<script src="/player.js"></script>
+</body>
+</html>

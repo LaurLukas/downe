@@ -52,3 +52,20 @@ text = "Craft (click to expand)"
 
 [node name="CraftList" type="VBoxContainer" parent="Scroll/VBoxContainer"]
 unique_name_in_owner = true
+
+[node name="PlayersListLabel" type="Label" parent="Scroll/VBoxContainer"]
+text = "Players (click to expand) - suspicion and clues only. Loyalty stays on paper."
+
+[node name="AddPlayerRow" type="HBoxContainer" parent="Scroll/VBoxContainer"]
+
+[node name="NewPlayerName" type="LineEdit" parent="Scroll/VBoxContainer/AddPlayerRow"]
+unique_name_in_owner = true
+placeholder_text = "Player name"
+custom_minimum_size = Vector2(220, 0)
+
+[node name="AddPlayerButton" type="Button" parent="Scroll/VBoxContainer/AddPlayerRow"]
+unique_name_in_owner = true
+text = "Add Player"
+
+[node name="PlayersList" type="VBoxContainer" parent="Scroll/VBoxContainer"]
+unique_name_in_owner = true

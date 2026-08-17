@@ -15,6 +15,13 @@ var net_server := NetServer.new()
 var message_router: MessageRouter
 var persistence: Persistence
 
+## player_id -> peer_id, for the one channel that isn't broadcast to
+## everyone: a player's own suspicion/clues. Populated when a phone
+## page identifies itself (see _on_identify_player()), cleared on
+## disconnect. See GameState.to_public_dict()'s comment for why this
+## split exists.
+var _player_peer_ids: Dictionary[String, int] = {}
+
 func _init() -> void:
 	# Crash recovery: if a previous run left a save behind, resume from
 	# it instead of starting a fresh fleet. See CLAUDE.md's Persistence
@@ -34,6 +41,7 @@ func _ready() -> void:
 	add_child(net_server)
 	net_server.message_received.connect(_on_message_received)
 	net_server.client_connected.connect(_on_client_connected)
+	net_server.client_disconnected.connect(_on_client_disconnected)
 	game_state.mutated.connect(_broadcast_state)
 	var err := net_server.start(HTTP_LISTEN_PORT, WS_LISTEN_PORT)
 	if err != OK:
@@ -54,19 +62,49 @@ func _ready() -> void:
 	add_child(tv_window)
 	tv_display.game_state = game_state
 
-func _on_message_received(_peer_id: int, message: Dictionary) -> void:
+## "identify_player" is transport bookkeeping (which socket belongs to
+## which player), not a GameState mutation, so it's handled here rather
+## than routed through MessageRouter - see that class's own comment on
+## being "the only place in net/ that calls into core/" for mutations.
+func _on_message_received(peer_id: int, message: Dictionary) -> void:
+	if message.get("type", "") == "identify_player":
+		_on_identify_player(peer_id, message)
+		return
 	message_router.route(message)
 
-## Pushes the full state to a client the moment it connects, so it
+## Pushes the public state to a client the moment it connects, so it
 ## isn't stuck showing nothing until someone else causes a mutation.
+## Never the full to_dict() here - see GameState.to_public_dict().
 func _on_client_connected(peer_id: int) -> void:
-	net_server.send(peer_id, NetMessage.make("state", {"state": game_state.to_dict()}))
+	net_server.send(peer_id, NetMessage.make("state", {"state": game_state.to_public_dict()}))
 
-## Every connected ESP32/web/phone client gets the full state pushed on
-## every mutation - see GameState.mutated and CLAUDE.md's Persistence
+func _on_client_disconnected(peer_id: int) -> void:
+	for player_id: String in _player_peer_ids.keys():
+		if _player_peer_ids[player_id] == peer_id:
+			_player_peer_ids.erase(player_id)
+
+## A phone page announces which player it belongs to right after
+## connecting (see web/player.js). Unknown/malformed ids are ignored,
+## same trust posture as the rest of net/ - untrusted clients on this
+## network, but nothing here is worth validating harder than "does this
+## id exist".
+func _on_identify_player(peer_id: int, message: Dictionary) -> void:
+	var player_id: String = message.get("player_id", "")
+	if not game_state.players.has(player_id):
+		return
+	_player_peer_ids[player_id] = peer_id
+	net_server.send(peer_id, NetMessage.make("player_state", {"state": game_state.player_to_dict(player_id)}))
+
+## Every connected ESP32/web/phone client gets the public state pushed
+## on every mutation - see GameState.mutated and CLAUDE.md's Persistence
 ## section, which asks for the same "dump everything, every mutation"
 ## treatment for the save file. Right-sizing this to per-field diffs is
 ## future work if payload size ever becomes a real problem on the
 ## ESP32s (see CLAUDE.md's Networking section).
+##
+## Players' own suspicion/clues go out on a separate, targeted channel
+## instead of the broadcast - see GameState.to_public_dict()'s comment.
 func _broadcast_state() -> void:
-	net_server.broadcast(NetMessage.make("state", {"state": game_state.to_dict()}))
+	net_server.broadcast(NetMessage.make("state", {"state": game_state.to_public_dict()}))
+	for player_id: String in _player_peer_ids:
+		net_server.send(_player_peer_ids[player_id], NetMessage.make("player_state", {"state": game_state.player_to_dict(player_id)}))

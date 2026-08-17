@@ -94,3 +94,34 @@ button:active {
 	justify-content: space-between;
 	margin-top: 1rem;
 }
+
+.hidden {
+	display: none;
+}
+
+.suspicion-value {
+	font-size: 2.5rem;
+	font-weight: bold;
+	color: var(--accent);
+}
+
+.hint {
+	color: #8fa3ab;
+	font-size: 0.85rem;
+}
+
+.clue-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.clue-list li {
+	background: var(--panel);
+	border: 1px solid #223;
+	border-radius: 0.4rem;
+	padding: 0.6rem;
+}

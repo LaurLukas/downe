@@ -50,6 +50,9 @@ func test_announcement_line_formats_a_jump_report() -> void:
 	var entry := {"kind": "jump", "source_id": "aegis", "text": "3,7,2", "turn_number": 2}
 	assert_eq(DisplayFormat.announcement_line(entry), "Turn 2 - Jump coordinates (AEGIS): 3,7,2", "a jump announcement should show the ship's display name")
 
+func test_player_phone_url_shape() -> void:
+	assert_eq(DisplayFormat.player_phone_url("192.168.1.5", 8080, "s8cpm6nr"), "http://192.168.1.5:8080/player.html?id=s8cpm6nr", "player_phone_url should build a URL pointing at player.html with the id as a query param")
+
 func test_announcement_line_formats_a_scout_report() -> void:
 	var entry := {"kind": "scout", "source_id": "philia", "text": "nothing but rock", "turn_number": 1}
 	assert_eq(DisplayFormat.announcement_line(entry), "Turn 1 - Scout report (F.S. \"Philia\"): nothing but rock", "a scout announcement should show the craft's display name")

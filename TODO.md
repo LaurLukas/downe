@@ -76,10 +76,10 @@ Facilitator Guide v1.0.1*, p.5) covers most of "starting fleet setup":
 - [ ] **Wolf Attack data**: Wolf ship roster, attack-strength scaling off
       the pursuit track, battle-table numbers. Only the pursuit track
       itself (0–10, rise/fall) exists; nothing about what an attack does.
-- [ ] **Suspicion / secret objectives**: CLAUDE.md's Runtime topology
-      mentions player-phone pages for these, but there's no data model or
-      content for either yet (loyalty itself is explicitly paper-only, no
-      UI — that one's settled).
+- [x] **Suspicion / secret objectives**: built - see "Player phone pages"
+      under Backlog, below, for the full writeup. Loyalty itself is still
+      explicitly paper-only, no UI - that one's settled and stays that
+      way.
 - [ ] **Turn phase structure**: the shuttle brief references "Team Phase
       Maintenance Step 6" — implying Team Phase has an internal step
       sequence the host needs to be walked through. `TurnManager` currently
@@ -370,6 +370,76 @@ ships to dock at) and is now satisfied.
       12 ESP32 terminals discover the host's IP on the GL.iNet router
       (static IP? mDNS?). ESP32 firmware itself is out-of-repo work in a
       different codebase.
-- [ ] **Player phone pages** (`web/`): only the ship terminal exists.
-      Suspicion and secret-objective pages need their data model settled
-      (see Blocked, above) before they can be built.
+- [x] **Player phone pages** (`web/`): built the suspicion/clue system
+      from `open_questions_answered.md` §4 - the only part of "secret
+      objectives" that isn't paper-only (loyalty itself stays off the
+      system entirely, CLAUDE.md constraint 4; §4.5 confirms phone pages
+      carry only suspicion and facilitator-issued clues).
+
+      - `core/player.gd` (`Player`) - id, name, suspicion (clamped at 0,
+        no stated upper bound), and a clue list. `changed`-bubbles into
+        `GameState.mutated` the same way Ship/CraftState do.
+        `Player.posse_size_required(suspicion, standers)` is FG's arrest
+        formula (§4.3) as pure arithmetic - "6 including the accuser,
+        minus 1 per 5 suspicion, plus 1 per stander," clamped to a
+        minimum of 1.
+      - **Not built**: the Intelligence Agent's 80%-accuracy
+        investigation (§4.4). Loyalty stays off the system entirely, so
+        the software has no ground truth to weight a roll against - only
+        a human with the paper cards can actually answer "is this
+        player a Wolf Agent," which is exactly constraint 4's point.
+        Also not built, per §4.6's own recommendation: any scoring model
+        for the open-ended team objectives.
+      - `ui/host/host_console.gd` - a new Players section: add a player
+        by name (host generates the id, types in whatever starting
+        suspicion the dealt loyalty card says), override suspicion
+        directly, a "roll 1d6" convenience button for the clue table
+        (§4.2 - pure dice arithmetic; the host still decides whether/who
+        to tell anything, same as away missions never auto-resolving),
+        the arrest posse-size calculator (host-only - FG: "tell the
+        players the number required, never the suspicion value"), a
+        clue history, and a send-clue field. Also shows each player's
+        phone-page URL (`DisplayFormat.player_phone_url()`) built from a
+        best-effort local IP guess, for the host to turn into a QR code
+        externally - actual QR generation is out of scope (no
+        CDN/library, and the IP itself is provisional pending the
+        Deployment item's IP-discovery decision above).
+      - `web/player.html` + `web/player.js` - a player's own phone page.
+        Identifies itself to the server right after connecting
+        (`{"type": "identify_player", "player_id": ...}`, read from the
+        URL's `?id=`), then renders exactly its own suspicion number and
+        clue feed. Deliberately neutral copy ("this number by itself
+        doesn't mean anything") - §4.1 is explicit that loyalists start
+        at 5 and 10 on purpose, and any UI must not imply a nonzero
+        score is evidence.
+
+      **Privacy boundary, not an afterthought**: suspicion and clues are
+      the first genuinely secret per-connection data this app has ever
+      sent over the network - unlike ships/craft (public knowledge in
+      the fiction), leaking one player's suspicion or clue text to every
+      socket would be a real problem, not just noise. `GameState.
+      to_dict()` (host-local save) still includes every player, but
+      `to_public_dict()` (what gets broadcast to all clients) strips
+      `"players"` entirely, and `player_to_dict(id)` is sent only to
+      that player's own peer_id via a new `player_state` message -
+      `ui/main.gd` tracks a `player_id -> peer_id` map, populated on
+      `identify_player` and cleared on disconnect. `net/message_router.gd`
+      is untouched; `identify_player` is transport bookkeeping (which
+      socket is which player), not a state mutation, so `ui/main.gd`
+      intercepts it before routing rather than teaching MessageRouter
+      about connection identity.
+
+      Verified end-to-end against the real running app (not just unit
+      tests): booted the actual `Main` scene, added two players
+      directly to its live `GameState`, connected three real websocket
+      clients (one that never identifies - like the ship terminal always
+      has - plus one per player), and confirmed: the unidentified
+      client's broadcasts never contain a `"players"` key; each
+      identified player only ever receives their own `player_state`,
+      never the other's (including a clue seeded specifically to try to
+      leak across); and mutating one player's suspicion only pushes an
+      update to that player's own connection. Also drove the host
+      console's Players section programmatically end-to-end (add player,
+      override suspicion, roll 1d6, run the posse calculator, send and
+      see a clue, read back the generated phone URL) and confirmed
+      static file serving for the two new web/ files.
