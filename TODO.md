@@ -70,9 +70,8 @@ Facilitator Guide v1.0.1*, p.5) covers most of "starting fleet setup":
 
 ## Blocked — still need answers
 
-- [ ] **Star systems**: the lettered roster (A, B, C…), descriptions, and
-      away-mission opportunities (skill + difficulty) — `StarSystem` and
-      `AwayMissionOpportunity` exist as empty containers with no data.
+- [x] **Star systems**: built - see "Star systems" under Backlog, below,
+      for the full writeup.
 - [x] **Wolf Attack data**: built - see "Wolf Attack system" under
       Backlog, below, for the full writeup.
 - [x] **Suspicion / secret objectives**: built - see "Player phone pages"
@@ -609,3 +608,125 @@ ships to dock at) and is now satisfied.
       the boarding card appearing for the right ship, the resolution
       list, and the TVDisplay/WolfAttackDisplay visibility swap in both
       directions).
+
+- [x] **Star systems**: built from `open_questions_answered.md` §1 -
+      the map topology, all 16 systems' content, and the per-game
+      mutable state each needs. Scoped as a data layer, matching what
+      the backlog item literally asked for ("exist as empty containers
+      with no data"); wiring this data into jump resolution, scout
+      range checks, or an away-mission-running host UI is follow-up
+      work, not done here (see below).
+
+      **core/star_chart.gd** (`StarChart`, new) - the 22-node jump
+      graph (`0000` plus 21 lettered systems), one fixed topology
+      shared by three "organiser chart" variants (A/B/C) that only
+      differ in which system letter sits on which node. The source doc
+      itself flags this transcription as unverified against the
+      printed original and explicitly asks for a symmetry test - added
+      (`tests/core/star_chart_test.gd`), plus node/edge count checks,
+      full connectivity, and confirmation that each chart omits exactly
+      the letters the source says it should (chart A has no B; chart B
+      has no A, C, or D; chart C has no A or B). All pass, which is
+      good evidence the transcription is internally consistent - it is
+      not proof it matches the printed chart, which nothing here can
+      check without the physical artwork.
+
+      **`core/star_system_definition.gd` + `star_system_definitions.gd`**
+      (new, mirrors `CraftDefinition`/`CraftDefinitions`) - the static
+      roster: all 13 card-based systems (A-M) with their opportunities
+      (skill, difficulty, critical threshold, reward text), plus
+      standing effects that belong on the system rather than any one
+      opportunity (G doesn't reduce pursuit; I doesn't raise pursuit
+      while present and deals maintenance-phase damage on a 3+; J deals
+      maintenance-phase damage on a 4+ and repeats every turn; K's
+      difficulty is secretly rolled and repeats every turn; L/M trigger
+      a Wolf Attack on arrival and block their own away mission until
+      the base there is destroyed).
+
+      **core/away_mission.gd** extended: `critical_threshold` (-1 = no
+      critical tier, matching "a single number means no critical
+      tier"), multi-skill opportunities (system C's "20 mining and
+      exploration" accepts either), reward/critical-reward text, and
+      `is_success()`/`is_critical()` threshold-comparison helpers -
+      still "automate the totalling and threshold comparison only" per
+      the source doc's own instruction; card dealing, discarding, and
+      assignment stay physical, unchanged from before.
+
+      **core/star_system.gd** rewritten as the mutable per-game
+      instance (mirrors `Ship`/`CraftState`): which opportunities have
+      been completed, whether an L/M Wolf base has been destroyed yet,
+      and K's rolled difficulty/critical threshold once
+      `roll_hidden_difficulty()` has been called (idempotent - a second
+      call is a no-op, since the source treats it as one fixed value
+      per game, not re-rolled per attempt). `changed`-bubbles into
+      `GameState.mutated` like everything else; `star_system_setup.gd`
+      (mirrors `FleetSetup`/`CraftSetup`) populates all 16 into a fresh
+      `GameState`, wired into `ui/main.gd`.
+
+      **A privacy boundary carried over from the Wolf Attack work**:
+      `GameState.to_public_dict()` (the network broadcast) excludes
+      `star_systems` entirely. System K's difficulty is explicitly
+      never supposed to reach a player - "your UI must be able to show
+      an unknown difficulty without leaking the rolled value" - and
+      unlike Wolf ship targeting there's no away-mission UI yet to
+      justify building a `WolfAttackView`-style partial-redaction path
+      for it. Full exclusion now, same treatment as `players`, revisited
+      if/when an away-mission UI needs to show *something* about a
+      system to a player.
+
+      **One source ambiguity resolved with the user, not guessed**:
+      system E's third reward reads "explore 2 wolf star systems (code
+      W1 or W2)" in the source table, but no W1/W2 system exists
+      anywhere in the charts or data - the source doc itself says "ask
+      before modelling it." Resolved by replacing it with a reward
+      pointing at real data instead: revealing the location of the two
+      actual Wolf systems, L and M - same "find Wolf territory" flavor,
+      but grounded in systems that exist. Covered by
+      `test_system_e_reward_replaces_broken_w1_w2_reference`.
+
+      **Deliberately not built, scope agreed with the user up front**:
+      - Systems N (Ancient Jump Ring), O (Deep Nebula), and P (Ancient
+        Space Station) - the "New Eden candidates" - have bespoke
+        non-card completion conditions (multi-step repair progress; a
+        scout-roll settlement mechanic with a hidden per-ship bonus
+        that must never reach any player-facing surface; a
+        reactor-cannibalization threshold). They exist in the topology
+        and roster (`is_new_eden_candidate`, `new_eden_description`)
+        but their bespoke mechanics aren't implemented - each is
+        realistically its own small system.
+      - Wiring `StarChart`/`StarSystemDefinitions` into
+        `JumpResolver` or scout range checks. `JumpResolver`'s pursuit
+        consequence is still a bool the *host* judges by looking at
+        what a scout typed, not something the engine computes from real
+        map data - auto-deriving it from `StarChart` would mean the
+        engine validating a scout's coordinates against reality, which
+        is exactly what CLAUDE.md constraint 1 forbids. Scout range
+        checks ("within N jumps" - Starlight 2, Hummingbird 3) would be
+        legitimate to wire up (a hard capability limit, not a
+        deception check), but nothing in the engine tracks the fleet's
+        actual current node yet either - a separate piece of work.
+      - An away-mission-running host console section (pick a system and
+        opportunity, enter the card total, see success/crit, apply the
+        reward) and automatic reward *application* to `GameState`.
+        Reward text is fully data-modeled now; nothing yet triggers
+        applying it. Natural next step once someone wants to actually
+        run an away mission through the tool rather than at the table
+        with a pen.
+
+      Also fixed in passing: CLAUDE.md's glossary was missing
+      `exploration` as a skill (six skills exist, not five) - the
+      source doc flagged this explicitly; now corrected.
+
+      6 new test files covering the graph topology/symmetry, the full
+      system roster (all 16 letters, every standing-effect flag, the
+      E-reward replacement, the "no minerals" guard the source doc
+      explicitly asks for), the mutable instance's behavior and dict
+      round-trip, and `GameState` wiring (bubbling, persistence,
+      `to_public_dict()` exclusion). 35 test files total, all passing.
+      Verified against the real running app: booted `Main` fresh and
+      confirmed all 16 systems populate; mutated three systems
+      (completed an opportunity, destroyed a Wolf base, rolled K's
+      hidden difficulty) and confirmed `to_public_dict()` still
+      excludes `star_systems` entirely; then did a real process
+      restart from the autosave and confirmed all three mutations,
+      including the rolled difficulty, survived crash recovery intact.

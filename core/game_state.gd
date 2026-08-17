@@ -77,11 +77,12 @@ func get_player(player_id: String) -> Player:
 	return players.get(player_id)
 
 func add_star_system(system: StarSystem) -> void:
-	star_systems[system.id] = system
+	star_systems[system.letter] = system
+	system.changed.connect(mutated.emit)
 	mutated.emit()
 
-func get_star_system(system_id: String) -> StarSystem:
-	return star_systems.get(system_id)
+func get_star_system(letter: String) -> StarSystem:
+	return star_systems.get(letter)
 
 func start_wolf_attack(round_number: int = 1) -> WolfAttack:
 	wolf_attack = WolfAttack.new(turn_manager.turn_number, round_number)
@@ -120,6 +121,9 @@ func to_dict() -> Dictionary:
 	var player_dict := {}
 	for player_id: String in players:
 		player_dict[player_id] = players[player_id].to_dict()
+	var star_system_dict := {}
+	for letter: String in star_systems:
+		star_system_dict[letter] = star_systems[letter].to_dict()
 	return {
 		"pursuit_track": pursuit_track.to_dict(),
 		"turn": turn_manager.to_dict(),
@@ -129,6 +133,7 @@ func to_dict() -> Dictionary:
 		"announcement_log": announcement_log.to_dict(),
 		"players": player_dict,
 		"wolf_attack": wolf_attack.to_dict() if wolf_attack != null else null,
+		"star_systems": star_system_dict,
 	}
 
 ## What gets broadcast to every connected client - everything except
@@ -154,6 +159,14 @@ func to_public_dict() -> Dictionary:
 		public_dict["wolf_attack"] = WolfAttackView.build(self)
 	else:
 		public_dict.erase("wolf_attack")
+	# star_systems isn't broadcast at all yet - system K's
+	# hidden_difficulty must never reach a player ("your UI must be
+	# able to show an unknown difficulty without leaking the rolled
+	# value" - open_questions_answered.md §1.2), and there's no away-
+	# mission UI yet to justify building a partial-redaction view for
+	# it the way WolfAttackView exists for targeting. Full exclusion
+	# until that UI exists, same treatment as players.
+	public_dict.erase("star_systems")
 	return public_dict
 
 ## The one player-specific slice that's safe to send to that player's
@@ -200,5 +213,9 @@ static func from_dict(data: Dictionary) -> GameState:
 	if wolf_attack_data is Dictionary:
 		state.wolf_attack = WolfAttack.from_dict(wolf_attack_data)
 		state.wolf_attack.changed.connect(state.mutated.emit)
+
+	var star_system_dict_data: Dictionary = data.get("star_systems", {})
+	for letter: String in star_system_dict_data:
+		state.add_star_system(StarSystem.from_dict(star_system_dict_data[letter]))
 
 	return state

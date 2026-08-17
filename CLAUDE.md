@@ -142,8 +142,8 @@ Write a test in `res://tests/` for any change to `core/`.
   written on the ship's sheet. Adjudicated during the Coordination Phase.
 - **Console** — a ship subsystem that can be damaged, repaired, or upgraded.
 - **Star systems** — lettered (A, B, C…), each with a description and away mission
-  opportunities rated by difficulty and skill type (mining, salvage, science,
-  engineering, search & rescue).
+  opportunities rated by difficulty and skill type (exploration, mining, salvage,
+  science, engineering, search & rescue).
 - **Wolf agent** — a player secretly working for the enemy. There may be more than
   one. The system must never reveal or infer who they are.
 

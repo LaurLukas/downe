@@ -31,6 +31,7 @@ func _init() -> void:
 	if saved.is_empty():
 		game_state = FleetSetup.build_starting_fleet()
 		CraftSetup.populate_starting_craft(game_state)
+		StarSystemSetup.populate_star_systems(game_state)
 	else:
 		game_state = GameState.from_dict(saved)
 
