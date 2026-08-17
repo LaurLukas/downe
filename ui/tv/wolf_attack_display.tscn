@@ -1,0 +1,87 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://ui/tv/wolf_attack_display.gd" id="1"]
+
+[node name="WolfAttackDisplay" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1")
+
+[node name="Root" type="VBoxContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="TitleLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+text = "WOLF ATTACK"
+horizontal_alignment = 1
+
+[node name="IncomingPanel" type="VBoxContainer" parent="Root"]
+unique_name_in_owner = true
+
+[node name="IncomingSubtitle" type="Label" parent="Root/IncomingPanel"]
+unique_name_in_owner = true
+text = "ALL SHUTTLES DOCK NOW"
+horizontal_alignment = 1
+
+[node name="IncomingComposition" type="Label" parent="Root/IncomingPanel"]
+unique_name_in_owner = true
+
+[node name="IncomingCapacity" type="Label" parent="Root/IncomingPanel"]
+unique_name_in_owner = true
+horizontal_alignment = 1
+
+[node name="IncomingTurnPursuit" type="Label" parent="Root/IncomingPanel"]
+unique_name_in_owner = true
+horizontal_alignment = 1
+
+[node name="StandingPanel" type="VBoxContainer" parent="Root"]
+unique_name_in_owner = true
+size_flags_vertical = 3
+
+[node name="PhaseTracker" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+
+[node name="WolfCapacityLabel" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+
+[node name="WolfGrid" type="HFlowContainer" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+
+[node name="FleetRow" type="HBoxContainer" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+size_flags_vertical = 3
+
+[node name="PhaseBanner" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="BoardingPanel" type="VBoxContainer" parent="Root"]
+unique_name_in_owner = true
+
+[node name="BoardingList" type="HBoxContainer" parent="Root/BoardingPanel"]
+unique_name_in_owner = true
+
+[node name="BoardingDefenseTable" type="Label" parent="Root/BoardingPanel"]
+unique_name_in_owner = true
+text = "BOARDING DEFENCE - ROLL 1d6      1 SECURITY TEAM DIES      2-3 NO EFFECT      4+ WOLF ASSAULT TEAM DIES"
+horizontal_alignment = 1
+
+[node name="ResolutionPanel" type="VBoxContainer" parent="Root"]
+unique_name_in_owner = true
+
+[node name="ResolutionTitle" type="Label" parent="Root/ResolutionPanel"]
+unique_name_in_owner = true
+text = "ATTACK ENDS"
+horizontal_alignment = 1
+
+[node name="ResolutionList" type="VBoxContainer" parent="Root/ResolutionPanel"]
+unique_name_in_owner = true
+
+[node name="ResolutionReturning" type="Label" parent="Root/ResolutionPanel"]
+unique_name_in_owner = true
+
+[node name="ResolutionNote" type="Label" parent="Root/ResolutionPanel"]
+unique_name_in_owner = true
+autowrap_mode = 2

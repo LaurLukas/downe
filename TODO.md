@@ -73,9 +73,8 @@ Facilitator Guide v1.0.1*, p.5) covers most of "starting fleet setup":
 - [ ] **Star systems**: the lettered roster (A, B, C…), descriptions, and
       away-mission opportunities (skill + difficulty) — `StarSystem` and
       `AwayMissionOpportunity` exist as empty containers with no data.
-- [ ] **Wolf Attack data**: Wolf ship roster, attack-strength scaling off
-      the pursuit track, battle-table numbers. Only the pursuit track
-      itself (0–10, rise/fall) exists; nothing about what an attack does.
+- [x] **Wolf Attack data**: built - see "Wolf Attack system" under
+      Backlog, below, for the full writeup.
 - [x] **Suspicion / secret objectives**: built - see "Player phone pages"
       under Backlog, below, for the full writeup. Loyalty itself is still
       explicitly paper-only, no UI - that one's settled and stays that
@@ -316,7 +315,7 @@ ships to dock at) and is now satisfied.
       formal test file - this project's suite doesn't instantiate `.tscn`
       Control scenes anywhere yet, and adding that pattern felt like a
       separate decision from this task.
-- [x] **TV display completeness (partial - 2 of 3)**: added a fleet
+- [x] **TV display completeness (3 of 3)**: added a fleet
       status overview (one row per ship: drive charge, jump coordinates,
       unrest, all six resource kinds - `DisplayFormat.ship_status_line()`)
       and a jump/scout announcement feed. Both rebuild freely on every
@@ -337,14 +336,9 @@ ships to dock at) and is now satisfied.
       data - same trust model as constraint 1, extended to the display
       layer instead of just the input layer.
 
-      **Not done - Wolf Attack support screen**: still blocked on a Wolf
-      ship roster / attack-strength / battle-table model that doesn't
-      exist anywhere in `core/` yet (`ships.md`/
-      `open_questions_answered.md` have the source data, per the Blocked
-      section above, but nothing's been built from it). Building a
-      screen for data that doesn't exist would mean inventing combat
-      rules rather than displaying real ones - that's a `core/` system
-      of its own, not a TV display task. Left as a follow-up.
+      **Wolf Attack support screen: built** - see "Wolf Attack system"
+      below. It needed the combat rules engine this note originally
+      said didn't exist yet; that engine is now built.
 
       Bug found and fixed along the way: the rebuild pattern (clear old
       rows, add new ones, same function call) used `queue_free()`, which
@@ -443,3 +437,175 @@ ships to dock at) and is now satisfied.
       override suspicion, roll 1d6, run the posse calculator, send and
       see a clue, read back the generated phone URL) and confirmed
       static file serving for the two new web/ files.
+
+- [x] **Wolf Attack system**: built from a dedicated brief
+      (`wolf_attack_tv_display.md`, added to the repo for this) plus
+      `open_questions_answered.md` §3. This is the biggest single
+      feature in the project so far - a combat rules engine, a full
+      host console control section, and a second TV screen the host
+      swaps to for the length of an attack.
+
+      **Scope, agreed up front**: the brief specifies pixel-exact
+      typography, staged reveal animations (700ms per Wolf ship,
+      overlapped), a custom flow container, and exact venue colours -
+      none of which can be verified without a real TV, so all of that
+      was cut in favour of correct state/data/layout using plain Godot
+      Controls (`HFlowContainer` for the wolf token grid) and basic
+      `Tween`-free color overrides. Every piece of *arithmetic* in the
+      brief is implemented exactly; the *visual polish* is not. Also
+      cut, per the brief's own explicit instruction (§5.5/§9): survivor
+      loss per damage point - flagged there as unconfirmed and "do not
+      ship until confirmed," so only damage pips are shown, no
+      population-loss number anywhere.
+
+      **core/combat/** (new):
+      - `wolf_ship_definitions.gd` - static per-class data (capacity,
+        targeting table, and the damage-if-destroyed-at-phase /
+        damage-if-survives tables from open_questions_answered.md
+        §3.1). The brief's own PREVENTS table (§5.3) was derived
+        independently from the same source numbers and cross-checked
+        against this file in tests - both agreeing is what makes the
+        numbers trustworthy rather than transcribed once and hoped.
+      - `wolf_ship_state.gd` - one Wolf ship's live state (damage,
+        target die, which phase it was destroyed in if any).
+        `changed`-bubbles like Ship/CraftState/Player.
+      - `wolf_attack.gd` (`WolfAttack`) - the attack instance: 7-phase
+        state machine (incoming → targeting → long → medium → short →
+        boarding → resolution), host-driven only, forward *and*
+        backward (`advance_phase()`/`retreat_phase()` - "the host can
+        move backwards" is explicit in the brief). Targeting dice ARE
+        rolled by this class via the caller's rng, not left for the
+        host to type in - unlike scout/jump coordinates, a targeting
+        roll has no deception to protect (fleet-vs-NPC, not
+        player-vs-player), so it's automated the same way
+        `combat_table`'s fighter/Maliades/Highwall rolls already are.
+        `compute_damage_tally()` is the one non-obvious piece: a Wolf
+        ship's damage depends on *when* it dies (a dying blow locked in
+        at destruction, from `damage_if_destroyed_at`) versus surviving
+        to the end (`damage_if_survives`) - the same function serves
+        both the live "incoming damage" readout mid-attack and the
+        final resolution tally, since nothing about the derivation
+        changes, only whether more damage might still land.
+      - `wolf_attack_view.gd` (`WolfAttackView`) - pure view-builder
+        matching the brief's §6 data contract exactly. This is the
+        security boundary: **while phase is INCOMING, every Wolf
+        ship's "target" key is omitted from the dict entirely, not
+        sent as null** - the brief is explicit that a leak here is a
+        leaked traitor mechanic, and that the view handed to a screen
+        pre-reveal must not *contain* the targets, not merely avoid
+        drawing them. Targets are pre-rolled the moment a ship is added
+        (so the reveal is instant once TARGETING starts, matching "the
+        host pre-rolls before announcing the attack"), so this really
+        is a redaction, not a delay.
+
+      **A real leak caught before it shipped, not a hypothetical**:
+      `GameState.to_public_dict()` (what gets broadcast to every
+      connected client) was building `wolf_attack` from the raw
+      `WolfAttack.to_dict()`, which always has every ship's true
+      `target_die` - the persistence path needs that (a crash-recovery
+      restart must not re-roll targets the host already announced and
+      laid cards out for), but the *network* path doesn't get to see it
+      before the reveal. Fixed by having `to_public_dict()` substitute
+      `WolfAttackView.build(self)` for the raw object, so the broadcast
+      literally cannot see what the TV doesn't draw - reusing the one
+      function that already knows how to redact, rather than trusting
+      every future renderer (web terminal, some future ESP32 handler)
+      to remember not to. Covered directly:
+      `test_to_public_dict_never_leaks_targets_during_incoming` and
+      `test_to_dict_persistence_keeps_the_raw_target_die` in
+      `tests/core/combat/wolf_attack_view_test.gd`.
+
+      **ui/host/host_console.gd** - a new Wolf Attack section: start/end
+      attack, add Wolf ships by class, generic damage taps (+1/-1,
+      auto-destroys at capacity, undo un-destroys), retargeting
+      (re-roll for the Wolf Commander, ±1 shift for fighters/Maliades,
+      force-to-AEGIS for the AEGIS's C&C), a boarding sub-section
+      (decrement boarders/security teams, Wolf Commander "+2" one-shot),
+      and a resolution summary. Deliberately *not* built: console-weapon
+      abilities (Missile Launchers, Point Defence Lasers, Gorgoneion's
+      Missile Array, Vulcan's Laser Cannon) - the brief's own host-input
+      model (§8) never lists "roll ship weapon X", only a generic
+      damage tap, so the host resolves those dice physically/mentally
+      (same as they already would for anything off-script) and taps the
+      result on. Fighter Wings/Maliades/Highwall already had working
+      dice rolls via the existing `combat_table` ability from an earlier
+      session; wiring that into this UI as a convenience button was
+      explicitly deferred rather than built into this pass.
+
+      Unlike every other host console section, this one rebuilds its
+      entire subtree on every `GameState.mutated` rather than
+      refresh-on-expand - almost everything in it is taps and
+      spinbox+Set rows used live during a fast-paced attack, not free
+      text a rebuild could interrupt mid-typing.
+
+      **A real crash caught before it shipped**: connecting the rebuild
+      directly to `mutated` crashed immediately - "Object is locked and
+      can't be freed" - because the rebuild frees the whole section,
+      including whichever button's own `pressed` handler is what
+      triggered the mutation in the first place; Godot won't free a
+      node while it's still inside its own signal emission. Fixed with
+      `CONNECT_DEFERRED`, which runs the rebuild after that call stack
+      unwinds. Would have hit on the *first* button press in real play;
+      caught by a headless script that actually clicked through the
+      section rather than just calling core/ methods directly.
+
+      **ui/tv/wolf_attack_display.gd + .tscn** (new) - the second TV
+      screen, matching the brief's 4 distinct layouts (INCOMING;
+      STANDING, which covers targeting + all three range phases, since
+      the brief itself says they share one layout; BOARDING; RESOLUTION).
+      `ui/main.gd` now instantiates both `TVDisplay` and
+      `WolfAttackDisplay` as children of the same TV `Window`, toggling
+      `visible` on `GameState.mutated` based on whether `wolf_attack` is
+      active - swapped by visibility rather than added/removed from the
+      tree, so nothing has to be rebuilt from scratch when the host
+      flips back to check pursuit mid-attack. Entirely read-only, same
+      as `TVDisplay` - never mutates state, only renders
+      `WolfAttackView.build()`.
+
+      **Assumption, not a guess**: Small Ships (Gorgoneion, Capybara,
+      Warrior, Vulcan, Voyage 33-0) are treated as never targetable by
+      a Wolf ship. This was flagged as unconfirmed in the brief's own
+      §9, but both source documents independently lean the same way -
+      `ships.md`'s own Open Items section says the targeting table
+      listing only the six core ships "suggests they are never
+      targeted at all," and the brief's targeting table (§5.3) agrees.
+      Two sources converging, not one guess. Moot regardless for this
+      pass, since Small Ships aren't modeled as `Ship` objects in
+      `core/` at all yet (separate future system per the note further
+      up this file) - there's no object a Wolf ship even *could* target.
+      Same reason `live_fleet_weapons` only covers the AEGIS's two
+      weapon consoles and the craft with `combat_table` - Gorgoneion's
+      Missile Array and Vulcan's Laser Cannon are Small Ship consoles
+      with no object to check the charged/damaged state of yet.
+
+      **Also not built**: the brief's §7 second-window setup
+      (fullscreen, multi-monitor targeting, content scaling) - that's a
+      general TV-window deployment concern predating this feature, not
+      specific to Wolf Attacks, and overlaps the existing Deployment
+      item above (screen resolution at the venue is listed there as
+      unconfirmed too). The "LOST" placeholder for a destroyed/abandoned
+      core ship (§9 open question 3) wasn't built either - whole-ship
+      destruction isn't modeled anywhere in `core/` yet, only console
+      damage, so there's no state for a ship to be "LOST" *from*; all
+      six ships are always shown. Multiple simultaneous attacks (§9
+      open question 4) follow the brief's own recommendation without
+      extra code: ending and starting a new `WolfAttack` naturally
+      creates "a new instance" the way the brief suggests, and
+      `WolfAttack.round_number` exists for the TV to label them.
+
+      5 new test files covering the roster/damage-table cross-check,
+      per-ship state and its dict round-trip, the full attack state
+      machine (targeting/retargeting/damage/boarding/resolution math),
+      the view builder's security boundary, and `GameState` wiring
+      (persistence round-trip of an in-progress attack, `mutated`
+      bubbling). 31 test files total, all passing. Verified end-to-end
+      against the real running app twice: once driving the host
+      console's Wolf Attack section by tapping through every control
+      (start → add ship → damage → target reveal → retarget → range
+      phases → boarding → resolution → end), and once driving
+      `game_state.wolf_attack` directly while inspecting the actual TV
+      scene tree at every phase (composition/capacity on INCOMING,
+      token/card counts on STANDING, a destroyed token's token updating,
+      the boarding card appearing for the right ship, the resolution
+      list, and the TVDisplay/WolfAttackDisplay visibility swap in both
+      directions).

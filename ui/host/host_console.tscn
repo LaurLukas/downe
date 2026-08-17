@@ -69,3 +69,9 @@ text = "Add Player"
 
 [node name="PlayersList" type="VBoxContainer" parent="Scroll/VBoxContainer"]
 unique_name_in_owner = true
+
+[node name="WolfAttackLabel" type="Label" parent="Scroll/VBoxContainer"]
+text = "Wolf Attack"
+
+[node name="WolfAttackSection" type="VBoxContainer" parent="Scroll/VBoxContainer"]
+unique_name_in_owner = true

@@ -59,8 +59,24 @@ func _ready() -> void:
 	tv_window.size = Vector2i(1920, 1080)
 	var tv_display := preload("res://ui/tv/tv_display.tscn").instantiate()
 	tv_window.add_child(tv_display)
+	var wolf_attack_display := preload("res://ui/tv/wolf_attack_display.tscn").instantiate()
+	tv_window.add_child(wolf_attack_display)
 	add_child(tv_window)
 	tv_display.game_state = game_state
+	wolf_attack_display.game_state = game_state
+
+	# Same TV window, two screens sharing it: WolfAttackDisplay takes
+	# over the instant a Wolf Attack starts and TVDisplay resumes the
+	# instant it ends. Toggled via visible, not swapped in/out of the
+	# tree, so animation/scroll state in either one survives a host
+	# flipping back and forth (e.g. checking pursuit mid-attack).
+	game_state.mutated.connect(func() -> void:
+		var attack_active := game_state.wolf_attack != null
+		wolf_attack_display.visible = attack_active
+		tv_display.visible = not attack_active
+	)
+	tv_display.visible = game_state.wolf_attack == null
+	wolf_attack_display.visible = game_state.wolf_attack != null
 
 ## "identify_player" is transport bookkeeping (which socket belongs to
 ## which player), not a GameState mutation, so it's handled here rather

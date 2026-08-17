@@ -30,6 +30,7 @@ extends Control
 @onready var _players_list: VBoxContainer = %PlayersList
 @onready var _new_player_name: LineEdit = %NewPlayerName
 @onready var _add_player_button: Button = %AddPlayerButton
+@onready var _wolf_attack_section: VBoxContainer = %WolfAttackSection
 
 var game_state: GameState
 var _all_refreshers: Array[Callable] = []
@@ -60,11 +61,19 @@ func set_game_state(state: GameState) -> void:
 	_refresh_button.pressed.connect(_on_refresh_all_pressed)
 
 	_add_player_button.pressed.connect(_on_add_player_pressed)
+	# CONNECT_DEFERRED: _rebuild_wolf_attack_section() frees nodes,
+	# including whichever button's own pressed handler is what
+	# triggered this mutation - freeing a node while it's still inside
+	# its own signal emission crashes ("Object is locked and can't be
+	# freed"). Deferring runs the rebuild after that call stack has
+	# fully unwound instead.
+	game_state.mutated.connect(_rebuild_wolf_attack_section, CONNECT_DEFERRED)
 
 	_refresh()
 	_build_ship_panels()
 	_build_craft_panels()
 	_build_player_panels()
+	_rebuild_wolf_attack_section()
 
 func _on_advance_pressed() -> void:
 	game_state.turn_manager.advance()
@@ -357,3 +366,207 @@ func _best_guess_local_ip() -> String:
 			continue  # loopback, link-local/APIPA (no real network), or IPv6
 		return address
 	return "<host-ip>"
+
+## --- Wolf Attack --------------------------------------------------------
+## Unlike ships/craft/players, this section rebuilds on every
+## GameState.mutated rather than refresh-on-expand - it's almost
+## entirely taps and spinbox+Set rows the host uses in the moment
+## during a live attack, not free text fields that could lose in-
+## progress typing, so the "don't disrupt the host mid-edit" concern
+## that drove the other panels' design doesn't apply here. See
+## TVDisplay for the same reasoning applied to a fully read-only view.
+##
+## CLAUDE.md constraint 3: this is bookkeeping and arithmetic only. It
+## never picks a target, never decides whether a Wolf ship is
+## destroyed by anything other than the host tapping damage onto it,
+## and never resolves the boarding fight - the host reads dice
+## physically and taps the result on. See core/combat/wolf_attack.gd.
+
+const WOLF_CLASS_LABELS: Array[String] = [
+	"Battlestation", "Strikecarrier", "Cruiser", "Destroyer", "Fighter Wing", "Assault Transport",
+]
+const WOLF_PHASE_LABELS: Dictionary[WolfAttack.Phase, String] = {
+	WolfAttack.Phase.INCOMING: "Incoming",
+	WolfAttack.Phase.TARGETING: "Targeting",
+	WolfAttack.Phase.RANGE_LONG: "Range: Long",
+	WolfAttack.Phase.RANGE_MEDIUM: "Range: Medium",
+	WolfAttack.Phase.RANGE_SHORT: "Range: Short",
+	WolfAttack.Phase.BOARDING: "Boarding",
+	WolfAttack.Phase.RESOLUTION: "Resolution",
+}
+
+var _new_wolf_class_option: OptionButton
+
+func _rebuild_wolf_attack_section() -> void:
+	for child in _wolf_attack_section.get_children():
+		child.free()
+
+	if game_state.wolf_attack == null:
+		var start_button := Button.new()
+		start_button.text = "Start Wolf Attack"
+		start_button.pressed.connect(func() -> void: game_state.start_wolf_attack())
+		_wolf_attack_section.add_child(start_button)
+		return
+
+	var attack := game_state.wolf_attack
+
+	var phase_row := HBoxContainer.new()
+	var phase_label := Label.new()
+	phase_label.text = "Phase: %s" % WOLF_PHASE_LABELS.get(attack.phase, "?")
+	var retreat_button := Button.new()
+	retreat_button.text = "◂ Retreat"
+	retreat_button.pressed.connect(func() -> void: attack.retreat_phase())
+	var advance_button := Button.new()
+	advance_button.text = "Advance ▸"
+	advance_button.pressed.connect(func() -> void: attack.advance_phase())
+	var end_button := Button.new()
+	end_button.text = "End Attack"
+	end_button.pressed.connect(func() -> void: game_state.end_wolf_attack())
+	phase_row.add_child(phase_label)
+	phase_row.add_child(retreat_button)
+	phase_row.add_child(advance_button)
+	phase_row.add_child(end_button)
+	_wolf_attack_section.add_child(phase_row)
+
+	var add_row := HBoxContainer.new()
+	_new_wolf_class_option = OptionButton.new()
+	for label in WOLF_CLASS_LABELS:
+		_new_wolf_class_option.add_item(label)
+	var add_button := Button.new()
+	add_button.text = "Add Wolf Ship"
+	add_button.pressed.connect(func() -> void:
+		attack.add_wolf_ship(_new_wolf_class_option.selected as WolfShipDefinitions.Class, game_state.rng)
+	)
+	add_row.add_child(_new_wolf_class_option)
+	add_row.add_child(add_button)
+	_wolf_attack_section.add_child(add_row)
+
+	var total_capacity := 0
+	for id: String in attack.wolf_ships:
+		total_capacity += attack.wolf_ships[id].capacity()
+	var capacity_label := Label.new()
+	capacity_label.text = "Total damage capacity: %d" % total_capacity
+	_wolf_attack_section.add_child(capacity_label)
+
+	for id: String in attack.wolf_ships:
+		_wolf_attack_section.add_child(_build_wolf_ship_row(attack, attack.wolf_ships[id]))
+
+	if attack.phase == WolfAttack.Phase.BOARDING:
+		_wolf_attack_section.add_child(_build_boarding_section(attack))
+
+	if attack.phase == WolfAttack.Phase.RESOLUTION:
+		_wolf_attack_section.add_child(_build_resolution_section(attack))
+
+func _build_wolf_ship_row(attack: WolfAttack, ship: WolfShipState) -> Control:
+	var row := VBoxContainer.new()
+
+	var header := HBoxContainer.new()
+	var name_label := Label.new()
+	name_label.text = "%s %s - %d/%d dmg%s" % [
+		WolfShipDefinitions.code_for(ship.wolf_class), ship.id,
+		ship.damage_taken, ship.capacity(),
+		" - DESTROYED" if ship.is_destroyed() else "",
+	]
+	header.add_child(name_label)
+	var minus_button := Button.new()
+	minus_button.text = "-1 dmg"
+	minus_button.pressed.connect(func() -> void: attack.add_damage(ship.id, -1))
+	var plus_button := Button.new()
+	plus_button.text = "+1 dmg"
+	plus_button.pressed.connect(func() -> void: attack.add_damage(ship.id, 1))
+	header.add_child(minus_button)
+	header.add_child(plus_button)
+	row.add_child(header)
+
+	if attack.phase != WolfAttack.Phase.INCOMING:
+		var target_row := HBoxContainer.new()
+		var target_label := Label.new()
+		target_label.text = "Target: %s" % ShipRegistry.display_name(ship.target_ship_id())
+		target_row.add_child(target_label)
+		var reroll_button := Button.new()
+		reroll_button.text = "Re-roll (Wolf Commander)"
+		reroll_button.pressed.connect(func() -> void: attack.reroll_target(ship.id, game_state.rng))
+		var shift_down_button := Button.new()
+		shift_down_button.text = "Shift -1"
+		shift_down_button.pressed.connect(func() -> void: attack.shift_target(ship.id, -1))
+		var shift_up_button := Button.new()
+		shift_up_button.text = "Shift +1"
+		shift_up_button.pressed.connect(func() -> void: attack.shift_target(ship.id, 1))
+		var force_aegis_button := Button.new()
+		force_aegis_button.text = "Force → AEGIS (C&C)"
+		force_aegis_button.pressed.connect(func() -> void: attack.force_target(ship.id, "aegis"))
+		target_row.add_child(reroll_button)
+		target_row.add_child(shift_down_button)
+		target_row.add_child(shift_up_button)
+		target_row.add_child(force_aegis_button)
+		row.add_child(target_row)
+
+	return row
+
+func _build_boarding_section(attack: WolfAttack) -> Control:
+	var section := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "Boarding"
+	section.add_child(label)
+
+	for ship_id: String in attack.boarders_by_ship:
+		if attack.boarders_by_ship[ship_id] <= 0:
+			continue
+		var ship := game_state.get_ship(ship_id)
+		if ship == null:
+			continue
+		var row := HBoxContainer.new()
+		var info_label := Label.new()
+		info_label.text = "%s - %d boarders vs %d security teams" % [
+			ShipRegistry.display_name(ship_id), attack.boarders_by_ship[ship_id],
+			ship.resources.get_amount(ResourceStock.Kind.SECURITY_TEAMS),
+		]
+		row.add_child(info_label)
+		var minus_boarder := Button.new()
+		minus_boarder.text = "-1 boarder"
+		minus_boarder.pressed.connect(func() -> void: attack.decrement_boarders(ship_id, 1))
+		var minus_team := Button.new()
+		minus_team.text = "-1 security team"
+		minus_team.pressed.connect(func() -> void: ship.resources.add(ResourceStock.Kind.SECURITY_TEAMS, -1))
+		row.add_child(minus_boarder)
+		row.add_child(minus_team)
+		if not attack.wolf_commander_leading_boarding:
+			var lead_button := Button.new()
+			lead_button.text = "Wolf Commander leads (+2 boarders)"
+			lead_button.pressed.connect(func() -> void: attack.lead_boarding_with_commander(ship_id))
+			row.add_child(lead_button)
+		section.add_child(row)
+
+	return section
+
+func _build_resolution_section(attack: WolfAttack) -> Control:
+	var section := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "Resolution"
+	section.add_child(label)
+
+	var tally := attack.compute_damage_tally()
+	var damage_by_ship: Dictionary = tally["damage_by_ship"]
+	for ship_id: String in ShipRegistry.all_ship_ids():
+		var damage_line := Label.new()
+		var damage: int = damage_by_ship.get(ship_id, 0)
+		damage_line.text = "%s: %d damage" % [ShipRegistry.display_name(ship_id), damage]
+		section.add_child(damage_line)
+
+	var returning_counts: Dictionary = tally["returning_counts"]
+	var returning_parts: Array[String] = []
+	for cls: WolfShipDefinitions.Class in returning_counts:
+		returning_parts.append("%d %s" % [returning_counts[cls], WolfShipDefinitions.class_name_for(cls)])
+	var returning_line := Label.new()
+	returning_line.text = "Returning next attack: %s" % (", ".join(returning_parts) if not returning_parts.is_empty() else "none")
+	section.add_child(returning_line)
+
+	# Deliberately not shown: survivor loss per damage point.
+	# wolf_attack_tv_display.md §5.5/§9 explicitly flags this as
+	# unconfirmed and says not to ship it until it is - only damage
+	# pips are shown above.
+	var note := Label.new()
+	note.text = "(Survivor loss per damage point is not modeled yet - unconfirmed, see TODO.md)"
+	section.add_child(note)
+
+	return section

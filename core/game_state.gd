@@ -16,6 +16,11 @@ var pursuit_track := PursuitTrack.new()
 var turn_manager := TurnManager.new()
 var announcement_log := AnnouncementLog.new()
 
+## Null except during an active attack - CLAUDE.md constraint 3: Wolf
+## Attacks stay a physical gathering, so this only exists when the host
+## has actually started one, and goes away the moment they end it.
+var wolf_attack: WolfAttack = null
+
 const _PLAYER_ID_ALPHABET := "abcdefghijklmnopqrstuvwxyz0123456789"
 
 ## Player ids are embedded in that player's phone-page URL/QR code, so
@@ -78,6 +83,18 @@ func add_star_system(system: StarSystem) -> void:
 func get_star_system(system_id: String) -> StarSystem:
 	return star_systems.get(system_id)
 
+func start_wolf_attack(round_number: int = 1) -> WolfAttack:
+	wolf_attack = WolfAttack.new(turn_manager.turn_number, round_number)
+	wolf_attack.changed.connect(mutated.emit)
+	mutated.emit()
+	return wolf_attack
+
+## The host ends the attack when the physical gathering is done -
+## never automatic. See CLAUDE.md constraint 3.
+func end_wolf_attack() -> void:
+	wolf_attack = null
+	mutated.emit()
+
 ## Unused console charge and unused craft fuel/per-turn ability uses are
 ## lost at the end of every turn, whether or not they were spent - see
 ## downe_shuttle_implementation_prompt.md §2 "Fuelling" and
@@ -111,18 +128,32 @@ func to_dict() -> Dictionary:
 		"craft": craft_dict,
 		"announcement_log": announcement_log.to_dict(),
 		"players": player_dict,
+		"wolf_attack": wolf_attack.to_dict() if wolf_attack != null else null,
 	}
 
 ## What gets broadcast to every connected client - everything except
-## per-player secret data (suspicion, clues). Ships/craft/pursuit/turn
-## are public knowledge in the fiction; a player's suspicion and clues
-## are not, and broadcasting them to every socket would let anyone
-## inspecting their browser's network traffic read what was meant for
-## one specific player's phone. See player_to_dict() and
-## ui/main.gd's per-player send.
+## per-player secret data (suspicion, clues), and with wolf_attack
+## replaced by its redacted view rather than the raw object.
+##
+## Two separate secrets, two separate reasons: a player's suspicion and
+## clues are not public knowledge in the fiction at all, so they're cut
+## entirely (see player_to_dict() and ui/main.gd's per-player send).
+## Wolf ship targeting *is* public once revealed - the raw
+## WolfAttack.to_dict() just isn't safe to hand out before that, since
+## every ship's target is pre-rolled and stored the moment it's added
+## (wolf_attack_tv_display.md §2/§6: the view handed to clients during
+## the pre-attack state must not *contain* the targets, not merely
+## avoid drawing them). WolfAttackView.build() is the one function that
+## already knows how to redact that correctly - reusing it here means
+## the network payload can't leak what the TV already refuses to draw,
+## instead of relying on every future renderer to remember not to.
 func to_public_dict() -> Dictionary:
 	var public_dict := to_dict()
 	public_dict.erase("players")
+	if wolf_attack != null:
+		public_dict["wolf_attack"] = WolfAttackView.build(self)
+	else:
+		public_dict.erase("wolf_attack")
 	return public_dict
 
 ## The one player-specific slice that's safe to send to that player's
@@ -164,5 +195,10 @@ static func from_dict(data: Dictionary) -> GameState:
 	var player_dict_data: Dictionary = data.get("players", {})
 	for player_id: String in player_dict_data:
 		state.add_player(Player.from_dict(player_dict_data[player_id]))
+
+	var wolf_attack_data: Variant = data.get("wolf_attack")
+	if wolf_attack_data is Dictionary:
+		state.wolf_attack = WolfAttack.from_dict(wolf_attack_data)
+		state.wolf_attack.changed.connect(state.mutated.emit)
 
 	return state
