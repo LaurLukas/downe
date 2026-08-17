@@ -57,7 +57,19 @@ func _ready() -> void:
 
 	var tv_window := Window.new()
 	tv_window.title = "Downe - TV Display"
-	tv_window.size = Vector2i(1920, 1080)
+	# 1920x1080 is the design resolution (see wolf_attack_tv_display.md),
+	# but sizing the actual OS window to exactly that and leaving Godot
+	# to place it at its default (0, 0) means the title bar and edges -
+	# which sit outside the content area - land off-screen on any
+	# display at or near that same resolution, making the window look
+	# borderless and impossible to drag despite genuinely having a
+	# border. Smaller default so decorations always have room to render
+	# on-screen; still freely resizable up to full design resolution
+	# and beyond. A dedicated fullscreen/multi-monitor mode for actual
+	# venue use is a separate, not-yet-built concern - see TODO.md's
+	# Deployment item.
+	tv_window.size = Vector2i(1280, 720)
+	tv_window.position = Vector2i(80, 80)
 	var tv_display := preload("res://ui/tv/tv_display.tscn").instantiate()
 	tv_window.add_child(tv_display)
 	var wolf_attack_display := preload("res://ui/tv/wolf_attack_display.tscn").instantiate()
