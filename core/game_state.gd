@@ -47,6 +47,7 @@ var rng := RandomNumberGenerator.new()
 func _init() -> void:
 	turn_manager.phase_changed.connect(_on_phase_changed)
 	turn_manager.phase_changed.connect(func(_turn: int, _phase: TurnManager.Phase) -> void: mutated.emit())
+	turn_manager.advanced.connect(_on_advanced)
 	pursuit_track.changed.connect(func(_new_value: int) -> void: mutated.emit())
 	announcement_log.entry_added.connect(func(_entry: Dictionary) -> void: mutated.emit())
 
@@ -108,8 +109,22 @@ func _on_phase_changed(_turn: int, phase: TurnManager.Phase) -> void:
 		var ship: Ship = ships[ship_id]
 		for console_id: String in ship.consoles:
 			ship.consoles[console_id].set_charged(false)
+		ship.clear_maintenance_steps()
 	for craft_id: String in craft:
 		craft[craft_id].clear_turn_state()
+
+## Pursuit +2 per turn - open_questions_answered.md §5.4. Connected to
+## TurnManager.advanced, not phase_changed - see that signal's own
+## comment for why. Fires only on a genuine advance() into a new Team
+## Phase, never on force_set() (crash-recovery restore, or a host
+## correction), and never on the game's very first Team Phase (turn 1
+## starts there without ever calling advance() - same "no advance
+## event yet" boundary the console-charge/craft-fuel clearing sweep
+## above already relies on).
+func _on_advanced(_turn: int, phase: TurnManager.Phase) -> void:
+	if phase != TurnManager.Phase.TEAM:
+		return
+	pursuit_track.rise(2)
 
 func to_dict() -> Dictionary:
 	var ship_dict := {}

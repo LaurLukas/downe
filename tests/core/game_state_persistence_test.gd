@@ -67,6 +67,21 @@ func test_round_trips_pursuit_track_and_rng_seed() -> void:
 	assert_eq(loaded.pursuit_track.value, 6, "pursuit track value should round-trip")
 	assert_eq(loaded.rng.seed, 12345, "rng seed should round-trip")
 
+func test_reloading_into_a_team_phase_does_not_double_apply_pursuit_per_turn() -> void:
+	# from_dict() restores turn/phase via TurnManager.force_set(), which
+	# - deliberately - does not emit TurnManager.advanced, only
+	# phase_changed. If it ever did, every reload of a save sitting in a
+	# Team Phase would silently add +2 pursuit it shouldn't, compounding
+	# on every restart. _build_interesting_state() saves at pursuit 6
+	# while still in the game's initial Turn 1 Team Phase, so a real
+	# regression here would show up as 8, not 6.
+	var state := _build_interesting_state()
+	assert_eq(state.turn_manager.phase, TurnManager.Phase.TEAM, "the state under test must actually be sitting in a Team Phase for this to be a meaningful check")
+
+	var loaded := GameState.from_dict(state.to_dict())
+
+	assert_eq(loaded.pursuit_track.value, 6, "reloading a save sitting in a Team Phase must not re-apply the +2/turn pursuit rule")
+
 func test_loading_a_team_phase_save_does_not_wipe_the_state_it_just_loaded() -> void:
 	# Regression test: TurnManager.force_set() emits phase_changed the
 	# same as advance() does, which clears console charge / craft fuel

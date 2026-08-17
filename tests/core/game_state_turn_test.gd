@@ -41,3 +41,44 @@ func test_advancing_within_the_same_turn_does_not_clear_state() -> void:
 	state.turn_manager.advance()  # TEAM -> COORDINATION, same turn
 
 	assert_true(craft_state.fuelled, "entering Coordination Phase should not clear fuel - only a new Team Phase does")
+
+func test_advancing_into_a_new_team_phase_raises_pursuit_by_two() -> void:
+	var state := _build_game_state()
+	var starting_pursuit := state.pursuit_track.value
+
+	state.turn_manager.advance()  # TEAM -> COORDINATION
+	state.turn_manager.advance()  # COORDINATION -> TEAM (turn 2)
+
+	assert_eq(state.pursuit_track.value, starting_pursuit + 2, "entering a new Team Phase via advance() should raise pursuit by 2")
+
+func test_advancing_into_coordination_phase_does_not_raise_pursuit() -> void:
+	var state := _build_game_state()
+	var starting_pursuit := state.pursuit_track.value
+
+	state.turn_manager.advance()  # TEAM -> COORDINATION
+
+	assert_eq(state.pursuit_track.value, starting_pursuit, "entering Coordination Phase should not raise pursuit - only a new Team Phase does")
+
+func test_force_set_into_team_phase_does_not_raise_pursuit() -> void:
+	# Critical distinction: force_set() is used both for crash-recovery
+	# restore (GameState.from_dict()) and a host correction
+	# (HostConsole's "Force Set" override) - neither represents a real
+	# turn happening, so neither should trigger the +2/turn rule. This
+	# is exactly why TurnManager.advanced is a separate signal from
+	# phase_changed rather than reusing it.
+	var state := _build_game_state()
+	var starting_pursuit := state.pursuit_track.value
+
+	state.turn_manager.force_set(5, TurnManager.Phase.TEAM)
+
+	assert_eq(state.pursuit_track.value, starting_pursuit, "force_set() into a Team Phase must not raise pursuit")
+
+func test_advancing_into_a_new_team_phase_clears_ship_maintenance_checklist() -> void:
+	var state := _build_game_state()
+	var ship := state.get_ship("aegis")
+	ship.mark_maintenance_step_complete(MaintenanceCycle.Step.STORAGE)
+
+	state.turn_manager.advance()  # TEAM -> COORDINATION
+	state.turn_manager.advance()  # COORDINATION -> TEAM (turn 2)
+
+	assert_true(not ship.is_maintenance_step_complete(MaintenanceCycle.Step.STORAGE), "a new Team Phase should clear the previous turn's maintenance checklist")

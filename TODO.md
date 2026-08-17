@@ -78,13 +78,15 @@ Facilitator Guide v1.0.1*, p.5) covers most of "starting fleet setup":
       under Backlog, below, for the full writeup. Loyalty itself is still
       explicitly paper-only, no UI - that one's settled and stays that
       way.
-- [ ] **Turn phase structure**: the shuttle brief references "Team Phase
-      Maintenance Step 6" — implying Team Phase has an internal step
-      sequence the host needs to be walked through. `TurnManager` currently
-      only has two flat phases, no steps.
-- [ ] **Unrest**: `resources.md` establishes starting unrest (0) and the
-      mutiny threshold (8+) but nothing in `core/` tracks it yet — no
-      `Ship.unrest` field, no rules for what raises/lowers it.
+- [x] **Turn phase structure**: built - see "Maintenance Cycle" under
+      Backlog, below, for the full writeup.
+- [x] **Unrest**: the field existed already (`Ship.unrest`, added
+      earlier this project); what was missing was anything that raised
+      or lowered it. `MaintenanceCycle.roll_unrest_gain()` now does the
+      raising - see "Maintenance Cycle" below. No documented mechanism
+      lowers it anywhere in the source material found so far, other
+      than the mutiny threshold (8+) itself being a facilitator call,
+      not an automatic reset.
 
 None of these block the craft/shuttle system below — they block star
 systems, Wolf Attacks, secret-info phone pages, and a stepped Team Phase
@@ -730,3 +732,116 @@ ships to dock at) and is now satisfied.
       excludes `star_systems` entirely; then did a real process
       restart from the autosave and confirmed all three mutations,
       including the rolled difficulty, survived crash recovery intact.
+
+- [x] **Maintenance Cycle**: built from `open_questions_answered.md`
+      §5, cross-checked against `ships.md`'s per-ship Reactor/ration
+      data. The Team Phase's internal step sequence - each ship's table
+      runs 6 steps (7 for AEGIS) at its own pace, not fleet-wide in
+      lockstep.
+
+      **`core/maintenance_cycle.gd`** (new) - step definitions, and the
+      arithmetic each one needs: Reactor charge caps and damaged
+      penalties per ship (`ships.md`'s own "Reactor charges vs. console
+      count" table plus each ship's Reactor console entry, not the
+      rougher "-2 or -3" summary in `open_questions_answered.md`, which
+      doesn't say which ships get which penalty - this doc does,
+      unambiguously, per ship); ration cost tables per ship
+      (§2.3); `apply_storage_step()` (reuses the already-built
+      `StorageDamage`); `spend_rations()`; `roll_unrest_gain()` (2d6 +
+      ration bonus, thresholds at 12 and 20); `roll_riot_damage()` (1d6
+      vs current unrest); Reactor cap/charged-count reference numbers;
+      `refuel_shuttle()` (spends 1 strytium fuel, fuels one docked
+      craft, through whichever Shuttle Bay console - AEGIS has two,
+      Zeta and Omega, everyone else has one).
+
+      **Scope boundary carried over directly from a decision already
+      made this session for Wolf Attack resolution**: *which specific
+      console* takes riot damage is not modeled. `open_questions_
+      answered.md` §2.1 is explicit that damage is dealt by drawing
+      from a finite **per-ship** deck of that ship's own printed
+      console cards ("this is load-bearing - model the deck, not a
+      random console picker") - a real system of its own, not yet built
+      anywhere in `core/`. `roll_riot_damage()` reports *whether* a hit
+      landed (dice arithmetic, automated, no deception potential); the
+      host draws the physical card and marks the resulting console
+      damaged through the per-console override HostConsole already has
+      - exactly the same split already applied to Wolf Attack damage
+      resolution (the number is computed, which console takes it stays
+      physical).
+
+      Similarly, **which consoles get charged (step 5)** and **which
+      shuttle gets refuelled (steps 6/7 - which craft, not that it
+      happens)** stay host/player choices made through controls that
+      already existed (the per-console "charged" toggle, craft
+      docking) - this only adds the cap/count reference numbers and,
+      for refueling specifically, the fuel-spending action itself
+      (spending resources is exactly the kind of arithmetic this
+      project already automates everywhere else).
+
+      **`core/turn_manager.gd`**: added a new `advanced` signal, kept
+      deliberately separate from the existing `phase_changed`. This
+      exists for one reason: `force_set()` (used both by `GameState.
+      from_dict()` on crash-recovery restore, and by HostConsole's
+      "Force Set" override button) emits `phase_changed` exactly like a
+      real `advance()` does, and there's no way to tell them apart from
+      inside a `phase_changed` handler. That distinction turned out to
+      matter immediately - see below.
+
+      **A real bug caught by reasoning about the persistence path, not
+      just by testing the happy path**: `open_questions_answered.md`
+      §5.4 says pursuit rises by 2 every turn, which is easy arithmetic
+      to automate - and the first draft did, by hooking it to
+      `phase_changed`. That would have meant every reload of a save
+      sitting in a Team Phase silently added +2 pursuit it shouldn't
+      have, compounding a little more on every crash-recovery restart -
+      exactly the failure mode this project's Persistence design exists
+      to protect against, undone by the very feature meant to help.
+      Caught before it was ever wired up wrong, by asking "what else
+      calls the thing this connects to" before connecting it - the
+      `advanced` signal exists specifically so pursuit-per-turn (and
+      anything like it later) can listen to "a turn actually happened"
+      without also catching "a save got reloaded" or "the host corrected
+      a mistake". `test_reloading_into_a_team_phase_does_not_double_
+      apply_pursuit_per_turn` and `test_force_set_into_team_phase_does_
+      not_raise_pursuit` guard this directly.
+
+      **`core/ship.gd`**: added `completed_maintenance_steps` - a
+      per-turn checklist (which of this ship's 6/7 steps have run this
+      Team Phase), cleared by the same end-of-Team-Phase sweep that
+      already clears console charge and craft fuel.
+
+      **`ui/host/host_console.gd`**: each ship's existing panel gained
+      a Maintenance Cycle section - a running checklist, a Storage-step
+      button, ration-level pickers with a spend button, unrest/riot
+      roll buttons showing the roll and result, Reactor cap/count
+      readout, and a refuel action per Shuttle Bay console (two for
+      AEGIS). Uses the same refresh-on-expand pattern as the rest of
+      the ship panel, not Wolf Attack's rebuild-on-every-mutation one -
+      these are occasional, once-per-turn actions with no rapid-fire
+      tapping to protect against, so there's no in-progress-typing risk
+      the way Wolf Attack's frequent damage taps have.
+
+      **Deliberately not built**: real-time clock/timer tracking (5
+      min Team Phase, 15 min Coordination, extended on turn 1) - the
+      backlog item was specifically about the missing step sequence,
+      not about wall-clock facilitation, and nothing here needs it.
+      Small Ships' 4-step cycle (no Storage step; the riot step costs
+      population instead of console damage) is captured as reference
+      data (`MaintenanceCycle.SmallShipStep`) but not wired to
+      anything, since Small Ships aren't modeled as objects in `core/`
+      yet - consistent with every other Small-Ship-shaped gap noted
+      elsewhere in this file.
+
+      2 new test files (`maintenance_cycle_test.gd`,
+      `ship_maintenance_steps_test.gd`) plus new tests added to the
+      existing turn/persistence suites, covering the arithmetic
+      (storage/rations/unrest/riot/reactor-cap/refuel), the `Ship`
+      checklist and its dict round-trip, and the `TurnManager.advanced`/
+      `phase_changed` split with the exact regression scenario described
+      above. 37 test files total, all passing. Verified against the
+      real running app:
+      expanded AEGIS's panel and tapped through all 7 steps in order,
+      confirming each one's actual effect (resources halved, rations
+      spent at the right per-ship cost, unrest changed, a docked
+      shuttle actually got fuelled and exactly 1 fuel was spent) and
+      that the checklist display updated correctly at every step.

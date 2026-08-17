@@ -4,6 +4,7 @@ extends RefCounted
 signal jump_coordinates_set(text: String)
 signal drive_charge_changed(charged: bool)
 signal unrest_changed(new_unrest: int)
+signal maintenance_step_completed(step: int)
 
 ## Fires on any change to this ship or anything docked in it - resources,
 ## consoles, jump coordinates, drive charge, unrest. GameState listens to
@@ -18,9 +19,17 @@ var can_scout: bool = false
 var drive_charged: bool = false
 var jump_coordinates: String = ""
 
-## Raised by low maintenance rolls, lowered by... none of that is
-## modeled yet. This is just the counter - see TODO.md.
+## Raised by MaintenanceCycle.roll_unrest_gain(). Nothing in the source
+## documents describes a way to lower it, other than the mutiny
+## threshold (8+) itself being a facilitator-adjudicated event, not an
+## automatic reset - see resources.md.
 var unrest: int = 0
+
+## Which of this Team Phase's Maintenance Cycle steps (MaintenanceCycle.
+## Step) this ship's table has already run. Cleared every new Team
+## Phase (GameState._on_phase_changed()) - it's a per-turn checklist,
+## not a permanent record.
+var completed_maintenance_steps: Array[int] = []
 
 ## The evacuation ceiling: no ship may exceed its starting population.
 ## Crew/passenger capacity numbers on the printed ship sheets are flavor
@@ -36,6 +45,7 @@ func _init(ship_id: String, scout_capable: bool = false) -> void:
 	jump_coordinates_set.connect(func(_text: String) -> void: changed.emit())
 	drive_charge_changed.connect(func(_charged: bool) -> void: changed.emit())
 	unrest_changed.connect(func(_new_unrest: int) -> void: changed.emit())
+	maintenance_step_completed.connect(func(_step: int) -> void: changed.emit())
 
 func add_console(console_id: String) -> Console:
 	var console := Console.new(console_id)
@@ -63,6 +73,21 @@ func set_unrest(new_unrest: int) -> void:
 	unrest = new_unrest
 	unrest_changed.emit(new_unrest)
 
+func is_maintenance_step_complete(step: int) -> bool:
+	return step in completed_maintenance_steps
+
+func mark_maintenance_step_complete(step: int) -> void:
+	if step in completed_maintenance_steps:
+		return
+	completed_maintenance_steps.append(step)
+	maintenance_step_completed.emit(step)
+
+## Bulk reset for a new Team Phase - deliberately silent (no signal per
+## step), since GameState._on_phase_changed() already triggers its own
+## mutated emission for the whole sweep it's part of.
+func clear_maintenance_steps() -> void:
+	completed_maintenance_steps.clear()
+
 func to_dict() -> Dictionary:
 	var console_dict := {}
 	for console_id: String in consoles:
@@ -77,6 +102,7 @@ func to_dict() -> Dictionary:
 		"max_survivor_population": max_survivor_population,
 		"resources": resources.to_dict(),
 		"consoles": console_dict,
+		"completed_maintenance_steps": completed_maintenance_steps.duplicate(),
 	}
 
 ## Rebuilds a Ship from a to_dict()-shaped dict (Persistence's saved
@@ -97,4 +123,6 @@ static func from_dict(data: Dictionary) -> Ship:
 	var console_dict: Dictionary = data.get("consoles", {})
 	for console_id: String in console_dict:
 		ship.add_console(console_id).load_from_dict(console_dict[console_id])
+	for step: Variant in data.get("completed_maintenance_steps", []):
+		ship.completed_maintenance_steps.append(int(step))
 	return ship

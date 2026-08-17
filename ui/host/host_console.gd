@@ -220,7 +220,149 @@ func _build_ship_panel(ship: Ship) -> void:
 		body.add_child(_make_toggle_row(refreshers, "  charged", func() -> bool: return console.charged, func(pressed: bool) -> void: console.set_charged(pressed)))
 		body.add_child(_make_spinbox_row(refreshers, "  upgrade level", func() -> float: return console.upgrade_level, 0, 10, func(value: int) -> void: console.upgrade_level = value))
 
+	body.add_child(_build_maintenance_cycle_section(ship, refreshers))
+
 	_all_refreshers.append_array(refreshers)
+
+## --- Maintenance Cycle (Team Phase step sequence) --------------------
+## Each ship's table works through these at its own pace - see
+## MaintenanceCycle's own file comment. Steps 1/3/4 are dice/arithmetic
+## and get "run it" buttons; step 2 is a player choice of ration level
+## with a spend button; step 5 (Reactor) and steps 6/7 (Shuttle Bay)
+## reuse controls that already exist elsewhere in this panel (the
+## per-console "charged" toggle above, and craft docking/fuel in the
+## Craft section) rather than duplicating them - this section just adds
+## the cap/count reference numbers and the fuel-spending refuel action,
+## plus a checklist so a table doesn't lose track of where it is.
+
+const RATION_LEVEL_LABELS: Array[String] = ["None", "Minimal", "Short", "Normal"]
+
+func _build_maintenance_cycle_section(ship: Ship, refreshers: Array[Callable]) -> Control:
+	var section := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "Maintenance Cycle"
+	section.add_child(label)
+
+	var checklist_label := Label.new()
+	section.add_child(checklist_label)
+	var refresh_checklist := func() -> void:
+		var parts: Array[String] = []
+		for step: MaintenanceCycle.Step in MaintenanceCycle.steps_for(ship.id):
+			var mark := "x" if ship.is_maintenance_step_complete(step) else " "
+			parts.append("[%s] %s" % [mark, MaintenanceCycle.STEP_LABELS[step]])
+		checklist_label.text = "  ".join(parts)
+	refreshers.append(refresh_checklist)
+	refresh_checklist.call()
+
+	# Step 1: Storage.
+	section.add_child(_make_action_row("Run Storage step (halves resources if damaged)", func() -> String:
+		MaintenanceCycle.apply_storage_step(game_state, ship.id)
+		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.STORAGE)
+		refresh_checklist.call()
+		return "done"
+	))
+
+	# Step 2: Rations. Bonus is held here (this closure's own scope) so
+	# step 3's button below can read whatever step 2 last produced.
+	var ration_bonus := [0]
+	var food_option := OptionButton.new()
+	var water_option := OptionButton.new()
+	for level_label in RATION_LEVEL_LABELS:
+		food_option.add_item(level_label)
+		water_option.add_item(level_label)
+	var ration_row := HBoxContainer.new()
+	var food_label := Label.new()
+	food_label.text = "Food"
+	var water_label := Label.new()
+	water_label.text = "Water"
+	ration_row.add_child(food_label)
+	ration_row.add_child(food_option)
+	ration_row.add_child(water_label)
+	ration_row.add_child(water_option)
+	section.add_child(ration_row)
+	section.add_child(_make_action_row("Spend rations", func() -> String:
+		ration_bonus[0] = MaintenanceCycle.spend_rations(game_state, ship.id, food_option.selected, water_option.selected)
+		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.RATIONS)
+		refresh_checklist.call()
+		return "bonus %d" % ration_bonus[0]
+	))
+
+	# Step 3: unrest roll, using whatever ration_bonus step 2 last set
+	# (0 if step 2 hasn't run yet this turn).
+	section.add_child(_make_action_row("Roll unrest (2d6 + ration bonus)", func() -> String:
+		var result := MaintenanceCycle.roll_unrest_gain(game_state, ship.id, ration_bonus[0])
+		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.UNREST_ROLL)
+		refresh_checklist.call()
+		return "rolled %d + %d = %d -> +%d unrest" % [result["dice"], result["ration_bonus"], result["total"], result["unrest_gain"]]
+	))
+
+	# Step 4: riot roll. Which console takes the damage is drawn from
+	# the ship's physical damage deck, not decided here - the host
+	# marks it via the console rows above once this reports a hit.
+	section.add_child(_make_action_row("Roll riot check (1d6 vs current unrest)", func() -> String:
+		var result := MaintenanceCycle.roll_riot_damage(game_state, ship.id)
+		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.RIOT_ROLL)
+		refresh_checklist.call()
+		if result["damaged"]:
+			return "rolled %d < %d unrest - HIT: draw a card and mark that console damaged above" % [result["roll"], result["unrest"]]
+		return "rolled %d >= %d unrest - no damage" % [result["roll"], result["unrest"]]
+	))
+
+	# Step 5: Reactor. Charging specific consoles is done via the
+	# per-console "charged" toggles above; this is just the reference
+	# numbers plus a checklist mark.
+	var reactor_label := Label.new()
+	section.add_child(reactor_label)
+	refreshers.append(func() -> void:
+		reactor_label.text = "Reactor: %d / %d consoles charged" % [MaintenanceCycle.charged_console_count(ship), MaintenanceCycle.reactor_charge_cap(ship)]
+	)
+	section.add_child(_make_action_row("Mark Reactor step complete", func() -> String:
+		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.REACTOR)
+		refresh_checklist.call()
+		return "done"
+	))
+
+	# Steps 6/7: Shuttle Bay refuel(s). AEGIS gets a 7th step (Omega) -
+	# see MaintenanceCycle.steps_for().
+	for step: MaintenanceCycle.Step in MaintenanceCycle.steps_for(ship.id):
+		if step != MaintenanceCycle.Step.SHUTTLE_BAY and step != MaintenanceCycle.Step.SHUTTLE_BAY_OMEGA:
+			continue
+		var bay_console_id := MaintenanceCycle.SHUTTLE_BAY_OMEGA_CONSOLE_ID if step == MaintenanceCycle.Step.SHUTTLE_BAY_OMEGA else MaintenanceCycle.shuttle_bay_console_id(ship.id)
+		var craft_option := OptionButton.new()
+		var docked_craft_ids: Array[String] = []
+		for craft_id: String in game_state.craft:
+			if game_state.craft[craft_id].docked_ship_id == ship.id:
+				docked_craft_ids.append(craft_id)
+				craft_option.add_item(craft_id)
+		section.add_child(craft_option)
+		var step_ref := step
+		section.add_child(_make_action_row("Refuel via %s (1 strytium fuel)" % bay_console_id, func() -> String:
+			if craft_option.selected < 0 or craft_option.selected >= docked_craft_ids.size():
+				return "no docked craft selected"
+			var craft_id := docked_craft_ids[craft_option.selected]
+			var refueled := MaintenanceCycle.refuel_shuttle(game_state, ship.id, craft_id, bay_console_id)
+			if refueled:
+				ship.mark_maintenance_step_complete(step_ref)
+				refresh_checklist.call()
+				return "refuelled %s" % craft_id
+			return "failed - check fuel and bay damage"
+		))
+
+	return section
+
+## A one-shot action button plus a result label - unlike the row
+## builders above, there's no persistent value to keep synced before
+## the button is pressed, so this isn't part of the refresh-on-expand
+## machinery. on_press returns the text to show as the result.
+func _make_action_row(button_text: String, on_press: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var button := Button.new()
+	button.text = button_text
+	var result_label := Label.new()
+	row.add_child(button)
+	row.add_child(result_label)
+	button.pressed.connect(func() -> void: result_label.text = String(on_press.call()))
+	return row
 
 ## --- craft panels -----------------------------------------------------
 
