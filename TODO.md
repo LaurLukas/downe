@@ -1536,3 +1536,138 @@ most-attacked ship, destroyed wolves stay visibly dead but counted, phase
 changes re-derive every ability label with no state push, and a host
 reassigning a target from the admin console actually moves the token to
 its new lane rather than the lane layout being a read-only derivation.
+
+## Next up — Wolf Attack TV display: damage ladder (replaces `PREVENTS N`)
+
+New handoff folder `ui/design_handoff_damage_ladder/` - **read
+`spec/wolf_attack_damage_ladder.md` directly before starting**, it's the
+authoritative addendum spec (same authority relationship as the lanes
+handoff: `README.md` is a denser restatement with a few extra visual
+details, `Wolf Attack Damage Ladder.dc.html` + `support.js` is browser-
+openable reference pseudocode, not production code to port). It's an
+*addendum* to `wolf_attack_tv_display_v3_lanes.md` (a copy sits alongside
+it in `spec/` for convenience) - tokens, tiers, lanes, palette and
+typography are otherwise unchanged from the v3 build just landed above.
+Two duplicate files the extraction left in `docs/` (`Wolf ships
+silhouette design.zip`, byte-identical to the handoff folder, and a
+stray copy of the spec `.md`) were deleted as pure clutter - the handoff
+folder itself is the one copy that matters.
+
+**The problem being fixed**: `PREVENTS N` (the current red ability line
+on every wolf token, built by `WolfLaneLayout.ability_label_full()`/
+`ability_abbrev()`) is phase-derived, so the same number means different
+things depending which range phase is active - a Cruiser's `PREVENTS 1`
+at Short (already spent most of its value) and a Destroyer's `PREVENTS 1`
+at any range (worth exactly that every phase) render identically despite
+demanding opposite host decisions. The fix replaces that single scalar
+with a **four-cell ladder** - Long/Medium/Short/Survives - so the shape
+of the sequence (rising, flat, or dead-end) carries the tactic without
+any legend:
+
+```
+CR   0 · 1 · 2 · 3      rising   → kill it now, value is bleeding
+DE   1 · 1 · 1 · 2      flat     → no rush, worth the same later
+BS   3 · 3 · — · 3      dead-end → killing it never helps the total
+FW   0 · 0 · 1 · 1      rising   → free to kill early, pointless at Short
+```
+
+**New pure module needed**: `res://core/wolf_damage.gd` (spec §8) - a
+`LADDER` const table (per-hull `[long, medium, short, survives]` cells,
+`null` for Battlestation's un-damageable Short cell) plus
+`damage_if_destroyed_now(hull, phase)`, `damage_if_survives(hull,
+live_fw_count)`, `lane_floor(wolves, phase)`, `lane_ceiling(wolves,
+live_fw_count)`. **The double-count trap the spec calls out by name**:
+the Strikecarrier's live-fighter-wing buff (`+1` per surviving Wolf FW)
+belongs on the **FW** rows' own ceiling, not added a second time to the
+`SC` row's ceiling - `SC`'s badge just *displays* the current count for
+legibility. This table substantially overlaps
+`core/combat/wolf_ship_definitions.gd`'s existing `DAMAGE_IF_DESTROYED_AT`/
+`DAMAGE_IF_SURVIVES`/`STRIKECARRIER_FIGHTER_BONUS` constants (already
+verified against the real printed cards earlier this session) - worth
+building `wolf_damage.gd` as a thin re-derivation from those rather than
+a second hand-typed copy of the same six numbers, so there's one source
+of truth instead of two that could drift.
+
+**Badges replace the named-ability text**: `↻` (BS/FW returns), `4BP`
+(AT, `ALERT_DEEP` filled chip, pulses at Boarding - matching the lane
+incoming line's existing BP chip), `+N` (SC, live count of undestroyed
+Wolf FW across the whole battle - not a constant, must recompute on
+every push same as everything else on this screen), `⊘S` (BS, "cannot
+be damaged at Short" - redundant with the Short cell already showing
+`—`, spec says show only at Tier A).
+
+**Lane incoming line becomes a range, not a projection**: `▼ ceiling`
+number plus a bar (`floor` = solid `ALERT`, remainder up to `ceiling` =
+outlined `ALERT` @ 0.35) - "is this lane already committed, or still
+worth shooting at" is exactly the arithmetic-not-judgment split this
+project already draws everywhere else on this screen (v3's own
+`incoming_damage_for_lane()` becomes `lane_ceiling`; a new
+`lane_floor()` sits next to it in `wolf_lane_layout.gd`, both backed by
+the new `core/wolf_damage.gd`).
+
+**A real disagreement between the spec and its own README - needs a
+call before building, not a guess**: spec §4 says the Tier A/B boundary
+itself moves to `max_stack ≤ 2` (tokens grow 100→118px to fit `L M S ✕`
+headers, so 3 no longer fits in the 332px stack zone: `3×118+2×10=374 >
+332`). The README explicitly overrides this in its own "Deviation from
+the spec" note: keep Tier A's boundary at `≤3` (unchanged from v3, and
+matching `WolfLaneLayout.TIERS`'s current `{"min":1,"max":3}` already
+built), drop the `118px`/headers only at exactly 2-or-fewer, and render
+3-stacked lanes as 100px tokens with a headerless 4-cell ladder replacing
+the ability line in the same space the single line used to occupy -
+reasoning given: "so the common board still looks like the live game"
+(apparently ~3 per lane is the typical case, and the spec's own boundary
+would make the *common* case visually shrink). This is a deliberate,
+reasoned deviation, not an inconsistency to silently pick a side on -
+worth a decision (probably favor the README's practical call, matching
+how `WolfLaneLayout.TIERS` is already built and tested, but confirm) before
+touching `WolfLaneLayout.TIERS`/`stack_zone_geometry()`.
+
+**Open item §10 ("verify before building, do not guess") is already
+answered by this project's own existing code**, not something to go
+re-check against source material: the spec asks whether wolf damage
+lands all at once at Resolve, or phase-by-phase as each ship dies. The
+`WolfAttack` state machine already implements the second reading -
+`compute_damage_already_dealt()` sums *dying blows* from ships
+destroyed during a completed range phase (locked in via
+`ship.destroyed_at_phase`), used live for the fleet card's mid-attack
+"damage this attack" readout; `compute_damage_tally()` adds full
+survivor damage only once ships are confirmed to have lived to
+Resolution. Fleet card damage numbers already tick up phase by phase
+today, not lump-summed at the end - the ladder redesign can build on
+this as settled fact rather than re-litigating it.
+
+**Deliberate design constraint carried over from the spec's own §7**,
+worth restating since it's exactly `CLAUDE.md`'s "a change that makes
+the software cleverer but the room quieter is a regression" rule applied
+to this specific screen: rules facts (`—`, `↻`, `4BP`) and derived
+arithmetic (floor, ceiling, live FW count) are fair game; verdict labels,
+urgency ranking, recommended-target highlighting, or sorting tokens by
+"how much you should care" are explicitly not - target priority is
+meant to be an argument the players have with each other, not something
+the screen resolves for them. Token order stays the existing v3 rule
+(descending hull capacity, stable by `uid`) - a fixed, explicable rule,
+not a live recommendation.
+
+**Acceptance checklist** (spec §9): a Cruiser at Long shows `0·1·2·3`
+with the first cell boxed; the same Cruiser at Short shows `0·1·2·3`
+with the third cell boxed and the first two greyed; a Battlestation
+shows `—` in the Short cell, never a number; a Fighter Wing at Medium
+visibly shows killing it now costs 1 vs. 0 at Short; a Strikecarrier's
+`+N` badge decreases live as Wolf FW die, no state push beyond the
+roster; a lane of three Destroyers reads mostly-solid-bar, a lane of
+three Cruisers at Long reads mostly-outlined; Tier A capacity is 2 per
+lane after the height increase (pending the boundary-vs-README decision
+above); at Tier C the ladder collapses to e.g. `1▸3` and still reads
+correctly when both values are equal; at `resolve` each token shows
+which cell actually landed; no token anywhere carries a verdict,
+ranking, or recommendation.
+
+**What this reuses from the just-landed v3 work, unchanged**: lane
+grouping/ordering/tier-selection scaffolding in `wolf_lane_layout.gd`,
+`WolfCodePips` (pips rendering stays identical), `ShipIcon` (same
+silhouettes), the destroyed-token whole-alpha+strikethrough treatment,
+and the content-aware sizing fix from this session's overlap bug (the
+ladder's cell row will need the same "measure the real font metric,
+don't guess a fixed height" treatment `_build_full_token()` now uses,
+given it's replacing the exact row that bug came from).
