@@ -1,17 +1,40 @@
 class_name ShipIcon
 extends Control
 
-## Hand-drawn vector silhouette for one Wolf ship class or fleet ship,
-## matching Wolf_Ships-selection.png's outline/stroke art style
-## (no fill, light-colored strokes). Parameterized by icon_id + color
-## so one script covers every class instead of one scene per ship -
-## same "data, not a class per instance" pattern as CraftDefinitions.
+## Renders one of the hand-authored ship silhouettes under
+## res://ui/design_handoff_wolf_attack_lanes/svg/ - six Wolf hull classes
+## (wolf_attack_tv_display_v2_gap_spec.md §4.5 step 7 / P1-14) and six
+## fleet ship silhouettes (§4.8's P1-10), replacing this file's earlier
+## _draw()-based vector art now that real artwork exists. That folder is
+## the v3 lane-redesign handoff bundle (see TODO.md) - its SVGs are the
+## one production copy, not reference material, per the user's explicit
+## instruction; there is no res://svg/ anymore. Fit "contain" (aspect
+## preserved, centered) within whatever size the caller gives this
+## Control, same as the old custom draw calls did.
 ##
-## First pass, not pixel-matched: these shapes were hand-derived from
-## looking at the reference image, not measured from it, and this
-## project has no way to render/screenshot a live Godot window to
-## check the result - see TODO.md. Expect to need visual adjustment
-## once someone actually looks at these running.
+## icon_color multiplies the SVG's own baked colors (Godot's normal
+## texture modulate) rather than replacing them - the fleet ship SVGs
+## already bake in a color close to WolfAttackTokens.SHIP_COLOR per ship,
+## and the wolf hull SVGs bake in a near-white stroke close to
+## WolfAttackTokens.INK, so passing those same tokens through as
+## icon_color is close to a no-op most of the time and exists mainly for
+## the "destroyed" dim state (INK_GHOST, which is dark, muting the icon
+## when multiplied in).
+
+const _TEXTURES: Dictionary[String, Texture2D] = {
+	"battlestation": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-battlestation.svg"),
+	"strikecarrier": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-strikecarrier.svg"),
+	"cruiser": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-cruiser.svg"),
+	"assault_transport": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-assault-transport.svg"),
+	"destroyer": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-destroyer.svg"),
+	"fighter_wing": preload("res://ui/design_handoff_wolf_attack_lanes/svg/wolf-fighter-wing.svg"),
+	"aegis": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-aegis.svg"),
+	"dione": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-dione.svg"),
+	"icebreaker": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-icebreaker.svg"),
+	"quellon": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-quellon.svg"),
+	"shepherd": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-shepherd.svg"),
+	"refinery_124": preload("res://ui/design_handoff_wolf_attack_lanes/svg/capital-refinery-124.svg"),
+}
 
 @export var icon_id: String = "":
 	set(value):
@@ -21,208 +44,15 @@ extends Control
 	set(value):
 		icon_color = value
 		queue_redraw()
-@export var line_width: float = 2.0:
-	set(value):
-		line_width = value
-		queue_redraw()
 
 func _draw() -> void:
-	var s := size
-	match icon_id:
-		"battlestation":
-			_draw_battlestation(s)
-		"strikecarrier":
-			_draw_strikecarrier(s)
-		"cruiser":
-			_draw_cruiser(s)
-		"assault_transport":
-			_draw_assault_transport(s)
-		"destroyer":
-			_draw_destroyer(s)
-		"fighter_wing":
-			_draw_fighter_wing(s)
-		"aegis":
-			_draw_aegis(s)
-		"dione":
-			_draw_dione(s)
-		"icebreaker":
-			_draw_icebreaker(s)
-		"quellon":
-			_draw_quellon(s)
-		"shepherd":
-			_draw_shepherd(s)
-		"refinery_124":
-			_draw_refinery(s)
-
-func _poly(points: PackedVector2Array) -> void:
-	var closed := points.duplicate()
-	closed.append(points[0])
-	draw_polyline(closed, icon_color, line_width, true)
-
-func _rect_outline(top_left: Vector2, rect_size: Vector2) -> void:
-	draw_rect(Rect2(top_left, rect_size), icon_color, false, line_width)
-
-## Blocky hexagonal hull with two forward prongs and small side fins.
-func _draw_battlestation(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.10, h * 0.5),
-		Vector2(w * 0.22, h * 0.22),
-		Vector2(w * 0.68, h * 0.18),
-		Vector2(w * 0.90, h * 0.35),
-		Vector2(w * 0.90, h * 0.65),
-		Vector2(w * 0.68, h * 0.82),
-		Vector2(w * 0.22, h * 0.78),
-	]))
-	draw_line(Vector2(w * 0.90, h * 0.40), Vector2(w * 1.0, h * 0.30), icon_color, line_width)
-	draw_line(Vector2(w * 0.90, h * 0.60), Vector2(w * 1.0, h * 0.70), icon_color, line_width)
-	_rect_outline(Vector2(w * 0.35, h * 0.35), Vector2(w * 0.08, h * 0.08))
-	_rect_outline(Vector2(w * 0.48, h * 0.35), Vector2(w * 0.08, h * 0.08))
-
-## Elongated torpedo shape - pointed nose, tapering tail fin.
-func _draw_strikecarrier(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.05, h * 0.42),
-		Vector2(w * 0.05, h * 0.58),
-		Vector2(w * 0.55, h * 0.62),
-		Vector2(w * 0.80, h * 0.5),
-		Vector2(w * 0.55, h * 0.38),
-	]))
-	draw_line(Vector2(w * 0.80, h * 0.5), Vector2(w * 0.95, h * 0.35), icon_color, line_width)
-	draw_line(Vector2(w * 0.80, h * 0.5), Vector2(w * 0.95, h * 0.65), icon_color, line_width)
-	_rect_outline(Vector2(w * 0.15, h * 0.44), Vector2(w * 0.10, h * 0.12))
-
-## Simple arrow/wedge.
-func _draw_cruiser(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.10, h * 0.35),
-		Vector2(w * 0.10, h * 0.65),
-		Vector2(w * 0.55, h * 0.65),
-		Vector2(w * 0.90, h * 0.5),
-		Vector2(w * 0.55, h * 0.35),
-	]))
-	_rect_outline(Vector2(w * 0.20, h * 0.42), Vector2(w * 0.08, h * 0.16))
-
-## Boxy hull with a pointed beak and small deck notches.
-func _draw_assault_transport(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.15, h * 0.3),
-		Vector2(w * 0.85, h * 0.3),
-		Vector2(w * 0.85, h * 0.7),
-		Vector2(w * 0.15, h * 0.7),
-		Vector2(w * 0.02, h * 0.5),
-	]))
-	for i in 4:
-		_rect_outline(Vector2(w * (0.28 + i * 0.15), h * 0.38), Vector2(w * 0.08, h * 0.1))
-
-## Twin thin hulls with crossing struts between them.
-func _draw_destroyer(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	draw_line(Vector2(w * 0.08, h * 0.28), Vector2(w * 0.92, h * 0.28), icon_color, line_width)
-	draw_line(Vector2(w * 0.08, h * 0.72), Vector2(w * 0.92, h * 0.72), icon_color, line_width)
-	draw_line(Vector2(w * 0.15, h * 0.28), Vector2(w * 0.85, h * 0.72), icon_color, line_width)
-	draw_line(Vector2(w * 0.85, h * 0.28), Vector2(w * 0.15, h * 0.72), icon_color, line_width)
-	draw_line(Vector2(w * 0.08, h * 0.28), Vector2(w * 0.08, h * 0.72), icon_color, line_width)
-	draw_line(Vector2(w * 0.92, h * 0.28), Vector2(w * 0.92, h * 0.72), icon_color, line_width)
-
-## Three loose single-seat fighter chevrons.
-func _draw_fighter_wing(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	var offsets: Array[Vector2] = [Vector2(0.0, 0.15), Vector2(0.28, 0.4), Vector2(0.05, 0.6)]
-	for offset in offsets:
-		var ox := w * offset.x
-		var oy := h * offset.y
-		_poly(PackedVector2Array([
-			Vector2(ox + w * 0.02, oy + h * 0.02),
-			Vector2(ox + w * 0.20, oy + h * 0.10),
-			Vector2(ox + w * 0.02, oy + h * 0.18),
-			Vector2(ox + w * 0.08, oy + h * 0.10),
-		]))
-
-## Boxy elongated military hull, slight forward taper.
-func _draw_aegis(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.05, h * 0.4),
-		Vector2(w * 0.05, h * 0.6),
-		Vector2(w * 0.6, h * 0.65),
-		Vector2(w * 0.95, h * 0.5),
-		Vector2(w * 0.6, h * 0.35),
-	]))
-
-## Elongated liner with porthole marks.
-func _draw_dione(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.05, h * 0.45),
-		Vector2(w * 0.05, h * 0.55),
-		Vector2(w * 0.85, h * 0.58),
-		Vector2(w * 0.95, h * 0.5),
-		Vector2(w * 0.85, h * 0.42),
-	]))
-	for i in 4:
-		_rect_outline(Vector2(w * (0.2 + i * 0.15), h * 0.46), Vector2(w * 0.05, w * 0.05))
-
-## Wedge/arrow, pointed front.
-func _draw_icebreaker(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.08, h * 0.4),
-		Vector2(w * 0.08, h * 0.6),
-		Vector2(w * 0.5, h * 0.6),
-		Vector2(w * 0.95, h * 0.5),
-		Vector2(w * 0.5, h * 0.4),
-	]))
-
-## Rounded/bulbous hull, approximated with a soft polyline curve.
-func _draw_quellon(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	var points := PackedVector2Array()
-	var segments := 16
-	for i in range(segments + 1):
-		var t := float(i) / segments * PI
-		points.append(Vector2(w * 0.5 - cos(t) * w * 0.42, h * 0.5 - sin(t) * h * 0.28))
-	draw_polyline(points, icon_color, line_width, true)
-	draw_line(points[0], points[segments], icon_color, line_width)
-
-## Elongated hull with dome bumps on top (hydroponics domes).
-func _draw_shepherd(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.08, h * 0.5),
-		Vector2(w * 0.15, h * 0.65),
-		Vector2(w * 0.85, h * 0.65),
-		Vector2(w * 0.92, h * 0.5),
-		Vector2(w * 0.85, h * 0.4),
-		Vector2(w * 0.15, h * 0.4),
-	]))
-	for i in 3:
-		draw_arc(Vector2(w * (0.32 + i * 0.18), h * 0.38), w * 0.06, PI, TAU, 12, icon_color, line_width)
-
-## Industrial hull with vertical tank/bar details.
-func _draw_refinery(s: Vector2) -> void:
-	var w := s.x
-	var h := s.y
-	_poly(PackedVector2Array([
-		Vector2(w * 0.08, h * 0.35),
-		Vector2(w * 0.08, h * 0.65),
-		Vector2(w * 0.75, h * 0.65),
-		Vector2(w * 0.92, h * 0.5),
-		Vector2(w * 0.75, h * 0.35),
-	]))
-	for i in 4:
-		draw_line(Vector2(w * (0.2 + i * 0.12), h * 0.4), Vector2(w * (0.2 + i * 0.12), h * 0.6), icon_color, line_width)
+	var texture: Texture2D = _TEXTURES.get(icon_id)
+	if texture == null:
+		return
+	var texture_size := texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0 or size.x <= 0.0 or size.y <= 0.0:
+		return
+	var scale := minf(size.x / texture_size.x, size.y / texture_size.y)
+	var fitted := texture_size * scale
+	var origin := (size - fitted) * 0.5
+	draw_texture_rect(texture, Rect2(origin, fitted), false, icon_color)

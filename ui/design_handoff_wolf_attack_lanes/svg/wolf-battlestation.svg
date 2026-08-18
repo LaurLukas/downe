@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 174 80" width="348" height="160">
+  <title>Wolf BS — battlestation</title>
+  <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+    <polygon points="60,8 118,20 132,38 118,56 60,68 46,38"></polygon>
+    <polygon points="132,30 168,34 168,42 132,46"></polygon>
+    <rect x="76" y="0" width="12" height="12"></rect>
+    <rect x="76" y="64" width="12" height="12"></rect>
+    <polygon points="46,30 22,26 10,30 10,46 22,50 46,46"></polygon>
+    <rect x="100" y="4" width="7" height="9"></rect>
+    <rect x="100" y="63" width="7" height="9"></rect>
+    <polygon points="122,24 152,14 156,20 128,30"></polygon>
+    <polygon points="122,52 152,62 156,56 128,46"></polygon>
+  </g>
+</svg>

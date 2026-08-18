@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 60" width="300" height="120">
+  <title>Capital ship — shepherd</title>
+  <g fill="#7FD46A">
+    <polygon points="30,24 102,24 122,32 102,40 30,40"></polygon>
+    <rect x="24" y="8" width="24" height="14" rx="7"></rect>
+    <rect x="56" y="8" width="24" height="14" rx="7"></rect>
+    <rect x="14" y="22" width="16" height="20"></rect>
+  </g>
+</svg>

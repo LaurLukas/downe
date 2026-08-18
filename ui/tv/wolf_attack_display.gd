@@ -35,7 +35,7 @@ extends Control
 @onready var _header_rule: ColorRect = %HeaderRule
 @onready var _phase_breadcrumb: HBoxContainer = %PhaseBreadcrumb
 @onready var _range_bands: RangeBands = %RangeBandsNode
-@onready var _wolf_force_row: HBoxContainer = %WolfForceRow
+@onready var _wolf_force_row: HFlowContainer = %WolfForceRow
 @onready var _fleet_row: HBoxContainer = %FleetRow
 @onready var _attack_vectors: TargetingLines = %AttackVectors
 @onready var _phase_banner: Label = %PhaseBanner
@@ -267,17 +267,27 @@ func _build_phase_item(phase_id: String, active: bool) -> Control:
 
 ## One wolf ship class silhouette + a code/pips/returns line + an
 ## ability label + a target line, no panel/border (spec §4.5, P0-04).
+## Fixed per-item width rather than SIZE_EXPAND_FILL: with an
+## HBoxContainer/HFlowContainer, EXPAND_FILL hands a lone item (or a
+## handful of them) all the row's leftover space, which is what was
+## stretching a single wolf ship across the entire screen. A fixed width
+## plus WolfForceRow's HFlowContainer wrap (see the .tscn) instead keeps
+## every item the same size whether there's 1 ship or the ~20 a big
+## attack can field, wrapping to further lines rather than squeezing or
+## stretching (spec §4.5 step 9's intent, generalized rather than
+## threshold-switching behavior at specific ship counts).
+const WOLF_ITEM_WIDTH := 180.0
+
 func _build_wolf_item(wolf_ship: Dictionary) -> Control:
 	var column := VBoxContainer.new()
-	column.size_flags_horizontal = SIZE_EXPAND_FILL
+	column.custom_minimum_size = Vector2(WOLF_ITEM_WIDTH, 0)
 	column.alignment = BoxContainer.ALIGNMENT_BEGIN
 	column.add_theme_constant_override("separation", 12)
 
 	var icon := ShipIcon.new()
 	icon.icon_id = wolf_ship["class"]
 	icon.icon_color = WolfAttackTokens.INK_GHOST if wolf_ship["destroyed"] else WolfAttackTokens.INK
-	icon.custom_minimum_size = Vector2(0, 95)
-	icon.size_flags_horizontal = SIZE_EXPAND_FILL
+	icon.custom_minimum_size = Vector2(WOLF_ITEM_WIDTH, 95)
 	column.add_child(icon)
 
 	var code_pips := WolfCodePips.new()

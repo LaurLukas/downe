@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 174 80" width="348" height="160">
+  <title>Wolf AT — assault transport</title>
+  <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+    <polygon points="18,18 118,18 140,30 140,48 118,60 18,60"></polygon>
+    <polygon points="140,22 156,30 156,48 140,56"></polygon>
+    <polygon points="152,24 168,20 158,32 152,32"></polygon>
+    <polygon points="152,54 168,58 158,46 152,46"></polygon>
+    <polygon points="152,36 170,39 152,42"></polygon>
+    <rect x="6" y="24" width="12" height="30"></rect>
+    <rect x="40" y="8" width="16" height="10"></rect>
+    <rect x="66" y="8" width="16" height="10"></rect>
+    <rect x="40" y="60" width="16" height="10"></rect>
+    <rect x="66" y="60" width="16" height="10"></rect>
+  </g>
+</svg>

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #05060D; }
+  a { color: #7FD8F0; }
+  a:hover { color: #CFE4F5; }
+  @keyframes bpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+</style>
+</helmet>
+
+<div style="width: 1920px; margin: 0 auto; font-family: Oxanium, 'Trebuchet MS', sans-serif; color: #DCE6F2; background: #05060D;">
+
+  <svg width="0" height="0" style="position: absolute; width: 0; height: 0; overflow: hidden;" aria-hidden="true">
+    <symbol id="hull-bs" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="60,8 118,20 132,38 118,56 60,68 46,38"></polygon>
+        <polygon points="132,30 168,34 168,42 132,46"></polygon>
+        <rect x="76" y="0" width="12" height="12"></rect>
+        <rect x="76" y="64" width="12" height="12"></rect>
+        <polygon points="46,30 22,26 10,30 10,46 22,50 46,46"></polygon>
+        <rect x="100" y="4" width="7" height="9"></rect>
+        <rect x="100" y="63" width="7" height="9"></rect>
+        <polygon points="122,24 152,14 156,20 128,30"></polygon>
+        <polygon points="122,52 152,62 156,56 128,46"></polygon>
+      </g>
+    </symbol>
+    <symbol id="hull-sc" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="16,26 104,20 146,30 168,32 148,38 168,44 146,46 104,56 16,50"></polygon>
+        <polygon points="70,8 104,11 108,20 66,26"></polygon>
+        <rect x="82" y="2" width="7" height="8"></rect>
+        <rect x="4" y="22" width="14" height="32"></rect>
+        <polygon points="104,56 132,56 122,66 104,62"></polygon>
+      </g>
+    </symbol>
+    <symbol id="hull-cr" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="26,30 100,24 166,38 100,52 26,46"></polygon>
+        <polygon points="66,8 98,20 102,26 62,28"></polygon>
+        <polygon points="58,46 94,46 86,58 56,54"></polygon>
+        <rect x="12" y="28" width="14" height="20"></rect>
+        <rect x="104" y="14" width="6" height="9"></rect>
+      </g>
+    </symbol>
+    <symbol id="hull-at" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="18,18 118,18 140,30 140,48 118,60 18,60"></polygon>
+        <polygon points="140,22 156,30 156,48 140,56"></polygon>
+        <polygon points="152,24 168,20 158,32 152,32"></polygon>
+        <polygon points="152,54 168,58 158,46 152,46"></polygon>
+        <polygon points="152,36 170,39 152,42"></polygon>
+        <rect x="6" y="24" width="12" height="30"></rect>
+        <rect x="40" y="8" width="16" height="10"></rect>
+        <rect x="66" y="8" width="16" height="10"></rect>
+        <rect x="40" y="60" width="16" height="10"></rect>
+        <rect x="66" y="60" width="16" height="10"></rect>
+      </g>
+    </symbol>
+    <symbol id="hull-de" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="34,33 108,30 132,36 132,40 108,46 34,43"></polygon>
+        <polygon points="108,30 168,22 168,26 116,37"></polygon>
+        <polygon points="108,46 168,54 168,50 116,39"></polygon>
+        <rect x="20" y="30" width="14" height="16"></rect>
+        <polygon points="60,22 88,29 88,33 56,33"></polygon>
+        <polygon points="60,54 88,47 88,43 56,43"></polygon>
+      </g>
+    </symbol>
+    <symbol id="hull-fw" viewBox="-2 -2 174 80">
+      <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+        <polygon points="60,30 96,36 60,42 68,36"></polygon>
+        <polygon points="16,10 48,17 16,24 24,17"></polygon>
+        <polygon points="16,48 48,55 16,62 24,55"></polygon>
+        <polygon points="104,10 132,16 104,22 111,16"></polygon>
+        <polygon points="104,50 132,56 104,62 111,56"></polygon>
+      </g>
+    </symbol>
+    <symbol id="ship-aegis" viewBox="0 0 150 60">
+      <g fill="#CFE4F5">
+        <polygon points="24,24 108,20 138,30 108,40 24,36"></polygon>
+        <polygon points="52,10 92,14 96,20 48,24"></polygon>
+        <rect x="60" y="4" width="26" height="7"></rect>
+        <rect x="12" y="20" width="12" height="20"></rect>
+        <rect x="34" y="36" width="34" height="7"></rect>
+      </g>
+    </symbol>
+    <symbol id="ship-dione" viewBox="0 0 150 60">
+      <g fill="#A97BFF">
+        <polygon points="14,24 118,24 140,32 118,42 14,42"></polygon>
+        <rect x="34" y="10" width="20" height="14"></rect>
+        <rect x="60" y="10" width="20" height="14"></rect>
+        <rect x="86" y="10" width="20" height="14"></rect>
+        <rect x="4" y="22" width="11" height="22"></rect>
+      </g>
+    </symbol>
+    <symbol id="ship-icebreaker" viewBox="0 0 150 60">
+      <g fill="#E8873C">
+        <polygon points="26,22 100,22 126,30 100,40 26,40"></polygon>
+        <rect x="14" y="12" width="14" height="38"></rect>
+        <polygon points="126,26 146,30 126,36"></polygon>
+        <rect x="60" y="14" width="10" height="8"></rect>
+        <rect x="60" y="40" width="10" height="8"></rect>
+      </g>
+    </symbol>
+    <symbol id="ship-quellon" viewBox="0 0 150 60">
+      <g fill="#46D6C0">
+        <polygon points="40,24 112,24 134,32 112,40 40,40"></polygon>
+        <circle cx="34" cy="32" r="16"></circle>
+        <circle cx="70" cy="16" r="10"></circle>
+        <rect x="96" y="14" width="8" height="10"></rect>
+      </g>
+    </symbol>
+    <symbol id="ship-shepherd" viewBox="0 0 150 60">
+      <g fill="#7FD46A">
+        <polygon points="30,24 102,24 122,32 102,40 30,40"></polygon>
+        <rect x="24" y="8" width="24" height="14" rx="7"></rect>
+        <rect x="56" y="8" width="24" height="14" rx="7"></rect>
+        <rect x="14" y="22" width="16" height="20"></rect>
+      </g>
+    </symbol>
+    <symbol id="ship-refinery124" viewBox="0 0 150 60">
+      <g fill="#F2D04A">
+        <rect x="10" y="42" width="130" height="10"></rect>
+        <rect x="20" y="20" width="18" height="22"></rect>
+        <rect x="46" y="12" width="14" height="30"></rect>
+        <rect x="70" y="24" width="20" height="18"></rect>
+        <rect x="100" y="16" width="14" height="26"></rect>
+      </g>
+    </symbol>
+  </svg>
+
+  <div data-screen-label="Wolf Attack — lanes" style="position: relative; width: 1920px; height: 1080px; overflow: hidden; background: radial-gradient(120% 100% at 50% 42%, #0A0D1A 0%, #0A0D1A 58%, #05060D 100%);">
+
+    <div style="position: absolute; inset: 0; background: radial-gradient(600px 330px at 380px 250px, rgba(42,21,82,0.55), rgba(42,21,82,0) 70%), radial-gradient(430px 230px at 760px 130px, rgba(74,26,85,0.45), rgba(74,26,85,0) 70%), radial-gradient(470px 280px at 1660px 330px, rgba(14,50,69,0.5), rgba(14,50,69,0) 70%), radial-gradient(720px 180px at 1150px 620px, rgba(61,46,99,0.34), rgba(61,46,99,0) 70%);"></div>
+    <div style="position: absolute; inset: 0; opacity: 0.5; background-image: radial-gradient(rgba(232,240,255,0.55) 1px, transparent 1.2px), radial-gradient(rgba(107,122,153,0.5) 1px, transparent 1.2px); background-size: 220px 190px, 97px 83px; background-position: 12px 30px, 0 0;"></div>
+    <div style="position: absolute; left: 0; top: 0; width: 1920px; height: 540px; background: linear-gradient(180deg, rgba(46,10,16,0.95), rgba(46,10,16,0.42) 50%, rgba(46,10,16,0));"></div>
+    <div style="position: absolute; left: 0; bottom: 0; width: 1920px; height: 530px; background: linear-gradient(180deg, rgba(5,6,13,0), rgba(5,6,13,0.75));"></div>
+
+    <div style="position: absolute; left: 95px; top: 56px; width: 1730px; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: baseline; justify-content: space-between;">
+        <div style="font-size: 54px; font-weight: 700; letter-spacing: 7px; color: #DCE6F2;">WOLF ATTACK</div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 34px; font-weight: 500; letter-spacing: 3px; color: #8A9AB0;">TURN 3</div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span style="font-size: 24px; font-weight: 600; letter-spacing: 3px; color: #8A9AB0;">FORCE</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #DCE6F2;">10 + PURSUIT 6 = 16 CAP</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #8A9AB0;">·</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #FF3B2E;">{{ committed }} COMMITTED</span>
+          <sc-if value="{{ overCap }}" hint-placeholder-val="{{ false }}">
+            <span style="padding: 2px 10px; background: rgba(255,197,61,0.16); border: 1px solid #FFC53D; font-family: 'IBM Plex Mono', monospace; font-size: 18px; letter-spacing: 2px; color: #FFC53D;">CAP EXCEEDED</span>
+          </sc-if>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px;">
+          <span style="font-size: 24px; font-weight: 600; letter-spacing: 3px; color: #8A9AB0;">PURSUIT</span>
+          <div style="display: flex; gap: 5px;">
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #FFC53D;"></div>
+            <div style="width: 30px; height: 20px; background: #24314A;"></div>
+            <div style="width: 30px; height: 20px; background: #24314A;"></div>
+            <div style="width: 30px; height: 20px; background: #24314A;"></div>
+            <div style="width: 30px; height: 20px; background: rgba(255,59,46,0.3);"></div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; color: #FFC53D;">6 / 10</span>
+        </div>
+      </div>
+      <div style="height: 1px; background: #24314A;"></div>
+      <div style="display: flex; align-items: center; gap: 16px; height: 34px;">
+        <sc-for list="{{ phases }}" as="ph" hint-placeholder-count="6">
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="width: {{ ph.dot }}px; height: {{ ph.dot }}px; border-radius: 50%; background: {{ ph.dotColor }}; box-shadow: {{ ph.glow }};"></div>
+            <span style="font-size: {{ ph.size }}px; font-weight: {{ ph.weight }}; letter-spacing: 3px; color: {{ ph.color }};">{{ ph.label }}</span>
+            <div style="width: 18px; height: 1px; background: #24314A;"></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="position: absolute; left: 95px; top: 236px; display: flex; align-items: center; gap: 26px; height: 30px;">
+      <sc-for list="{{ tally }}" as="t" hint-placeholder-count="6">
+        <div style="display: flex; align-items: baseline; gap: 3px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; letter-spacing: 1px; color: #8A9AB0;">{{ t.code }}</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; color: rgba(138,154,176,0.45);">×</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; color: #EDE4D6;">{{ t.n }}</span>
+        </div>
+      </sc-for>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; color: rgba(138,154,176,0.45);">·</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 22px; letter-spacing: 2px; color: rgba(138,154,176,0.55);">{{ destroyedLabel }}</span>
+    </div>
+
+    <sc-for list="{{ lanes }}" as="lane" hint-placeholder-count="6">
+      <div style="position: absolute; left: {{ lane.x }}px; top: 280px; width: {{ g.laneW }}px; height: 626px; opacity: {{ lane.opacity }};">
+
+        <div style="position: absolute; left: 0; top: 0; width: {{ g.laneW }}px; height: {{ g.stackH }}px; background: {{ lane.wash }};"></div>
+        <div style="position: absolute; left: 0; top: 0; width: {{ g.laneW }}px; height: 2px; background: {{ lane.washEdge }};"></div>
+
+        <div style="position: absolute; left: 50%; transform: translateX(-50%); top: {{ lane.spineTop }}px; width: {{ lane.spineW }}px; height: {{ lane.spineH }}px; background: {{ lane.spineColor }};"></div>
+
+        <div style="position: absolute; left: 0; bottom: {{ g.stackBottomOffset }}px; width: {{ g.laneW }}px; display: flex; flex-direction: column-reverse; align-items: stretch; gap: {{ g.gap }}px;">
+          <sc-for list="{{ lane.rows }}" as="row" hint-placeholder-count="0">
+            <div style="display: flex; gap: {{ g.gap }}px; justify-content: center;">
+              <sc-for list="{{ row.tokens }}" as="tok" hint-placeholder-count="1">
+                <div style="position: relative; width: {{ g.tokenW }}px; height: {{ g.rowH }}px; opacity: {{ tok.alpha }};">
+
+                  <sc-if value="{{ tok.full }}" hint-placeholder-val="{{ false }}">
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px;">
+                      <svg style="width: 116px; height: 54px;" aria-hidden="true"><use href="{{ tok.sym }}" width="100%" height="100%"></use></svg>
+                      <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 700; letter-spacing: 2px; color: {{ tok.codeColor }};">{{ tok.code }}</span>
+                        <div style="display: flex; gap: 7px;">
+                          <sc-for list="{{ tok.pips }}" as="pip" hint-placeholder-count="3">
+                            <div style="width: 10px; height: 10px; border-radius: 50%; background: {{ pip.bg }}; border: {{ pip.bd }};"></div>
+                          </sc-for>
+                        </div>
+                        <span style="font-size: 24px; color: #8A9AB0;">{{ tok.returns }}</span>
+                      </div>
+                      <div style="font-size: 18px; font-weight: 700; letter-spacing: 2px; color: {{ tok.abilityColor }};">{{ tok.ability }}</div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ tok.compact }}" hint-placeholder-val="{{ true }}">
+                    <div style="position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px; box-sizing: border-box; background: rgba(14,21,38,0.86); border: 1px solid #24314A; border-left: {{ tok.edge }};">
+                      <sc-if value="{{ tok.showGlyph }}" hint-placeholder-val="{{ true }}">
+                        <svg style="width: 40px; height: 22px; flex: none;" aria-hidden="true"><use href="{{ tok.sym }}" width="100%" height="100%"></use></svg>
+                      </sc-if>
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: {{ g.codeSize }}px; font-weight: 700; letter-spacing: 1px; color: {{ tok.codeColor }}; flex: none;">{{ tok.code }}</span>
+                      <sc-if value="{{ tok.showPips }}" hint-placeholder-val="{{ true }}">
+                        <div style="display: flex; gap: 5px; flex: none;">
+                          <sc-for list="{{ tok.pips }}" as="pip" hint-placeholder-count="3">
+                            <div style="width: {{ g.pipSize }}px; height: {{ g.pipSize }}px; border-radius: 50%; background: {{ pip.bg }}; border: {{ pip.bd }};"></div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ tok.showPipCount }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-family: 'IBM Plex Mono', monospace; font-size: {{ g.codeSize }}px; color: #8A9AB0;">{{ tok.pipCount }}</span>
+                      </sc-if>
+                      <span style="font-size: 18px; color: #8A9AB0; flex: none;">{{ tok.returns }}</span>
+                      <sc-if value="{{ tok.showAbility }}" hint-placeholder-val="{{ true }}">
+                        <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: {{ g.abbrSize }}px; font-weight: 700; letter-spacing: 1px; color: {{ tok.abilityColor }}; flex: none;">{{ tok.abbr }}</span>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ tok.destroyed }}" hint-placeholder-val="{{ false }}">
+                    <div style="position: absolute; left: 0; top: 50%; width: {{ g.tokenW }}px; height: 1px; background: rgba(138,154,176,0.7);"></div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ lane.overflow }}" hint-placeholder-val="{{ false }}">
+            <div style="height: {{ g.rowH }}px; display: flex; align-items: center; justify-content: center; background: rgba(255,59,46,0.1); border: 1px solid rgba(255,59,46,0.5); font-family: 'IBM Plex Mono', monospace; font-size: 18px; letter-spacing: 2px; color: #FF3B2E;">{{ lane.overflowLabel }}</div>
+          </sc-if>
+        </div>
+
+        <div style="position: absolute; left: 0; top: {{ g.incomingOffset }}px; height: 30px; display: flex; align-items: center; gap: 9px;">
+          <span style="font-size: 24px; font-weight: 700; color: {{ lane.incomingColor }};">{{ lane.marker }}</span>
+          <sc-if value="{{ lane.targeted }}" hint-placeholder-val="{{ true }}">
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 600; color: #FF3B2E;">{{ lane.dmg }}</span>
+            <span style="font-size: 19px; font-weight: 600; letter-spacing: 2px; color: rgba(255,59,46,0.8);">DMG</span>
+            <sc-if value="{{ lane.hasBp }}" hint-placeholder-val="{{ false }}">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 19px; color: rgba(138,154,176,0.5);">·</span>
+              <span style="padding: 1px 8px; background: {{ lane.bpBg }}; font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 700; letter-spacing: 1px; color: {{ lane.bpColor }};">{{ lane.bp }} BP</span>
+            </sc-if>
+          </sc-if>
+          <sc-if value="{{ lane.quiet }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 19px; font-weight: 600; letter-spacing: 3px; color: rgba(138,154,176,0.45);">{{ lane.quietLabel }}</span>
+          </sc-if>
+        </div>
+
+        <div style="position: absolute; left: 0; top: {{ g.cardTopOffset }}px; width: {{ g.laneW }}px; height: {{ g.cardH }}px; box-sizing: border-box; background: rgba(14,21,38,0.86); border: {{ lane.cardBorder }}; box-shadow: {{ lane.cardGlow }};">
+          <div style="position: absolute; left: 0; top: 0; width: 100%; height: 4px; background: {{ lane.color }};"></div>
+          <div style="position: absolute; left: 20px; top: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 80px; font-weight: 600; line-height: 1; color: {{ lane.indexColor }};">{{ lane.index }}</div>
+          <div style="position: absolute; right: 16px; top: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 20px; letter-spacing: 1px; color: {{ lane.color }};">SEC {{ lane.sec }}</div>
+          <svg style="position: absolute; right: 16px; top: 46px; width: 150px; height: 58px; opacity: {{ lane.glyphAlpha }};" aria-hidden="true"><use href="{{ lane.sym }}" width="100%" height="100%"></use></svg>
+          <div style="position: absolute; left: 20px; top: 112px; width: {{ g.nameW }}px; font-size: 28px; font-weight: 700; letter-spacing: 2px; color: {{ lane.nameColor }};">{{ lane.name }}</div>
+          <div style="position: absolute; left: 20px; top: 152px; display: flex; align-items: baseline; gap: 8px;">
+            <span style="font-size: 18px; font-weight: 600; letter-spacing: 2px; color: rgba(138,154,176,0.6);">DAMAGE</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 600; color: {{ lane.dmgTakenColor }};">{{ lane.dmgTaken }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: rgba(138,154,176,0.5);">/ {{ lane.sec }}</span>
+          </div>
+          <div style="position: absolute; left: 20px; top: 190px; width: {{ g.barW }}px; height: 6px; background: rgba(138,154,176,0.16);">
+            <div style="width: {{ lane.dmgPct }}%; height: 6px; background: {{ lane.dmgBarColor }};"></div>
+          </div>
+          <sc-if value="{{ lane.hasBp }}" hint-placeholder-val="{{ false }}">
+            <div style="position: absolute; left: 20px; top: 210px; padding: 2px 10px; background: rgba(255,59,46,0.9); font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 700; color: #0A0D1A;">{{ lane.bp }} BP INBOUND</div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-for>
+
+    <svg viewBox="0 0 1730 80" width="1730" height="80" style="position: absolute; left: 95px; top: {{ g.arcTop }}px; pointer-events: none;">
+      <path d="{{ g.arcPath }}" stroke="#7FD8F0" stroke-width="2.5" fill="none" opacity="0.75"></path>
+      <path d="{{ g.arcPath }}" stroke="#7FD8F0" stroke-width="9" fill="none" opacity="0.12"></path>
+    </svg>
+    <div style="position: absolute; right: 95px; top: 236px; height: 30px; display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 19px; font-weight: 600; letter-spacing: 3px; color: rgba(138,154,176,0.6);">RANGE</span>
+      <span style="font-size: 22px; font-weight: 700; letter-spacing: 4px; color: #7FD8F0;">{{ g.arcLabel }}</span>
+    </div>
+
+    <sc-if value="{{ staging }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; left: 95px; top: 280px; width: 1730px; height: {{ g.stackH }}px; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 12px; background: rgba(127,216,240,0.04); border: 1px dashed rgba(127,216,240,0.35);">
+        <div style="position: absolute; left: 16px; top: 12px; font-size: 20px; font-weight: 700; letter-spacing: 4px; color: rgba(127,216,240,0.75);">STAGING POOL — ASSIGNING TARGETS</div>
+        <sc-for list="{{ pool }}" as="tok" hint-placeholder-count="8">
+          <div style="width: 214px; height: {{ g.rowH }}px; display: flex; align-items: center; gap: 8px; padding: 0 8px; box-sizing: border-box; background: rgba(14,21,38,0.86); border: 1px solid #24314A; opacity: {{ tok.alpha }};">
+            <svg style="width: 40px; height: 22px; flex: none;" aria-hidden="true"><use href="{{ tok.sym }}" width="100%" height="100%"></use></svg>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: 1px; color: {{ tok.codeColor }};">{{ tok.code }}</span>
+            <div style="display: flex; gap: 5px;">
+              <sc-for list="{{ tok.pips }}" as="pip" hint-placeholder-count="3">
+                <div style="width: 7px; height: 7px; border-radius: 50%; background: {{ pip.bg }}; border: {{ pip.bd }};"></div>
+              </sc-for>
+            </div>
+            <span style="margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 700; color: {{ tok.abilityColor }};">{{ tok.abbr }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="position: absolute; left: 0; top: 932px; width: 1920px; display: flex; justify-content: center;">
+      <div style="padding: 3px 18px; background: rgba(5,6,13,0.9); font-size: 22px; letter-spacing: 3px; color: rgba(127,216,240,0.8);">TARGETING WRAPS  ·  7 → 1  ·  0 → 6</div>
+    </div>
+
+    <div style="position: absolute; left: 95px; top: 974px; width: 1730px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 19px; font-weight: 600; letter-spacing: 3px; color: rgba(138,154,176,0.7);">CANNOT BE TARGETED</span>
+        <div style="flex: 1; height: 1px; background: #24314A;"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 15px solid rgba(127,216,240,0.65);"></div>
+          <span style="font-size: 21px; font-weight: 700; letter-spacing: 2px; color: #8A9AB0;">FW ALPHA</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; color: rgba(127,216,240,0.9);">4</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 15px solid rgba(127,216,240,0.65);"></div>
+          <span style="font-size: 21px; font-weight: 700; letter-spacing: 2px; color: #8A9AB0;">FW BRAVO</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; color: rgba(127,216,240,0.9);">3</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 15px solid rgba(127,216,240,0.65);"></div>
+          <span style="font-size: 21px; font-weight: 700; letter-spacing: 2px; color: #8A9AB0;">PDF ESCORT</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; color: rgba(127,216,240,0.9);">4</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 15px solid rgba(127,216,240,0.65);"></div>
+          <span style="font-size: 21px; font-weight: 700; letter-spacing: 2px; color: #8A9AB0;">GORGONEION</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; color: rgba(127,216,240,0.9);">SHIELD → 2</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 15px solid rgba(127,216,240,0.65);"></div>
+          <span style="font-size: 21px; font-weight: 700; letter-spacing: 2px; color: #8A9AB0;">VULCAN</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 21px; color: rgba(127,216,240,0.9);">LASER</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;8 wolves · tier B&quot;,&quot;options&quot;:[&quot;3 wolves · tier A&quot;,&quot;8 wolves · tier B&quot;,&quot;15 wolves · over cap&quot;,&quot;24 wolves · over cap&quot;,&quot;30 wolves · over cap&quot;,&quot;12 on one ship&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Roster&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;medium&quot;,&quot;options&quot;:[&quot;targeting&quot;,&quot;long&quot;,&quot;medium&quot;,&quot;short&quot;,&quot;boarding&quot;,&quot;resolve&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Phase&quot;}}">
+const HULL = {
+  bs: { code: 'BS', cap: 6, dmg: 6, returns: true,  glyph: 'svg/wolf-battlestation.svg',    full: 'SIEGE BATTERY', abbr: 'SIEGE' },
+  sc: { code: 'SC', cap: 5, dmg: 5, returns: false, glyph: 'svg/wolf-strikecarrier.svg',    full: 'STOPS FW BUFF', abbr: 'FW+' },
+  cr: { code: 'CR', cap: 3, dmg: 3, returns: false, glyph: 'svg/wolf-cruiser.svg',          full: 'PREVENTS 2',    abbr: 'P2' },
+  at: { code: 'AT', cap: 2, dmg: 2, returns: false, glyph: 'svg/wolf-assault-transport.svg', full: 'PREVENTS 4 BP', abbr: '4BP', bp: 4 },
+  de: { code: 'DE', cap: 2, dmg: 2, returns: false, glyph: 'svg/wolf-destroyer.svg',        full: 'PREVENTS 1',    abbr: 'P1' },
+  fw: { code: 'FW', cap: 1, dmg: 1, returns: true,  glyph: 'svg/wolf-fighter-wing.svg',     full: 'PREVENTS 1',    abbr: 'P1' }
+};
+
+const FLEET = [
+  { id: 'aegis',        index: 1, name: 'AEGIS',        sec: 9, damage: 4, color: '#CFE4F5', glyph: 'svg/capital-aegis.svg' },
+  { id: 'dione',        index: 2, name: 'DIONE',        sec: 2, damage: 0, color: '#A97BFF', glyph: 'svg/capital-dione.svg' },
+  { id: 'icebreaker',   index: 3, name: 'ICEBREAKER',   sec: 2, damage: 1, color: '#E8873C', glyph: 'svg/capital-icebreaker.svg' },
+  { id: 'quellon',      index: 4, name: 'QUELLON',      sec: 2, damage: 0, color: '#46D6C0', glyph: 'svg/capital-quellon.svg' },
+  { id: 'shepherd',     index: 5, name: 'SHEPHERD',     sec: 2, damage: 1, color: '#7FD46A', glyph: 'svg/capital-shepherd.svg' },
+  { id: 'refinery124',  index: 6, name: 'REFINERY 124', sec: 6, damage: 0, color: '#F2D04A', glyph: 'svg/capital-refinery-124.svg' }
+];
+
+// [hull, target, count] — rosters for each acceptance scenario in §13
+const ROSTERS = {
+  '3 wolves · tier A':      [['bs', 'aegis', 1], ['cr', 'icebreaker', 1], ['fw', 'shepherd', 1]],
+  '8 wolves · tier B':      [['cr', 'aegis', 2], ['de', 'aegis', 2], ['at', 'quellon', 1], ['fw', 'icebreaker', 2], ['fw', 'shepherd', 1]],
+  '15 wolves · over cap':   [['bs', 'aegis', 1], ['sc', 'aegis', 1], ['cr', 'aegis', 3], ['de', 'aegis', 2], ['fw', 'aegis', 2], ['at', 'quellon', 2], ['de', 'icebreaker', 2], ['fw', 'shepherd', 1], ['cr', 'refinery124', 1]],
+  '24 wolves · over cap':   [['bs', 'aegis', 2], ['sc', 'aegis', 2], ['cr', 'aegis', 5], ['de', 'aegis', 4], ['fw', 'aegis', 4], ['at', 'quellon', 2], ['de', 'icebreaker', 3], ['fw', 'shepherd', 2]],
+  '30 wolves · over cap':   [['bs', 'aegis', 3], ['sc', 'aegis', 3], ['cr', 'aegis', 6], ['de', 'aegis', 7], ['fw', 'aegis', 7], ['at', 'quellon', 2], ['de', 'shepherd', 2]],
+  '12 on one ship':         [['bs', 'shepherd', 2], ['sc', 'shepherd', 2], ['cr', 'shepherd', 3], ['de', 'shepherd', 3], ['fw', 'shepherd', 2]]
+};
+
+const INK = '#EDE4D6', DIM = '#8A9AB0', GHOST = 'rgba(138,154,176,0.45)', ALERT = '#FF3B2E', CYAN = '#7FD8F0', RULE = '#24314A';
+const PHASES = ['TARGETING', 'LONG', 'MEDIUM', 'SHORT', 'BOARDING', 'RESOLVE'];
+
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+
+class Component extends DCLogic {
+  buildWolves(scenario) {
+    const spec = ROSTERS[scenario] || ROSTERS['8 wolves · tier B'];
+    const out = [];
+    let i = 0;
+    for (const [hull, target, count] of spec) {
+      for (let k = 0; k < count; k++, i++) {
+        const cap = HULL[hull].cap;
+        out.push({
+          uid: `wolf_${hull}_${String(i).padStart(2, '0')}`,
+          hull, target,
+          damage_taken: i % 4 === 1 ? Math.min(1, cap - 1) : 0,
+          destroyed: i % 9 === 5
+        });
+      }
+    }
+    return out;
+  }
+
+  tokenView(w, phase, g, laneW) {
+    const h = HULL[w.hull];
+    const dead = w.destroyed || phase === 'resolve' && w.damage_taken >= h.cap;
+    const live = h.cap - w.damage_taken;
+    const pips = [];
+    for (let p = 0; p < h.cap; p++) {
+      const filled = !dead && p < live;
+      pips.push({ bg: filled ? INK : 'transparent', bd: filled ? '0 solid transparent' : '1.6px solid #3C5F70' });
+    }
+    return {
+      uid: w.uid, code: h.code, sym: `#hull-${w.hull}`, pips, pipCount: `${dead ? 0 : live}/${h.cap}`,
+      full: g.tier === 'A', compact: g.tier !== 'A', destroyed: dead,
+      alpha: 1,
+      codeColor: dead ? DIM : INK,
+      ability: dead ? 'DESTROYED' : h.full,
+      abbr: dead ? 'DEAD' : h.abbr,
+      abilityColor: dead ? DIM : ALERT,
+      returns: h.returns && !dead ? '↻' : '',
+      edge: phase === 'short' && w.hull === 'fw' && !dead ? `2px solid ${CYAN}` : '1px solid #24314A',
+      showGlyph: laneW >= 240,
+      showPips: laneW >= 150,
+      showPipCount: laneW < 150,
+      showAbility: laneW >= 180
+    };
+  }
+
+  renderVals() {
+    const scenario = this.props.scenario ?? '8 wolves · tier B';
+    const phase = (this.props.phase ?? 'medium').toLowerCase();
+    const wolves = this.buildWolves(scenario);
+    const staging = phase === 'targeting';
+
+    const byTarget = {};
+    for (const s of FLEET) byTarget[s.id] = [];
+    for (const w of wolves) if (byTarget[w.target]) byTarget[w.target].push(w);
+
+    const order = (a, b) => (HULL[b.hull].dmg - HULL[a.hull].dmg) || (a.uid < b.uid ? -1 : 1);
+    for (const id in byTarget) {
+      const list = byTarget[id];
+      const liveW = list.filter(w => !w.destroyed).sort(order);
+      const deadW = list.filter(w => w.destroyed).sort(order);
+      byTarget[id] = liveW.concat(deadW);
+    }
+
+    const nLanes = FLEET.length;
+    const laneW = (1730 - (nLanes - 1) * 18) / nLanes;
+    const maxStack = staging ? Math.ceil(wolves.length / nLanes) : Math.max(...FLEET.map(s => byTarget[s.id].length));
+
+    let tier = 'A', rowH = 100, gap = 10, cols = 1, capacity = 3;
+    if (maxStack >= 25) { tier = 'D'; rowH = 26; gap = 4; cols = 3; capacity = 23; }
+    else if (maxStack >= 17) { tier = 'D'; rowH = 26; gap = 4; cols = 3; capacity = 24; }
+    else if (maxStack >= 9) { tier = 'C'; rowH = 30; gap = 5; cols = 2; capacity = 16; }
+    else if (maxStack >= 4) { tier = 'B'; rowH = 34; gap = 6; cols = 1; capacity = 8; }
+
+    const roomy = maxStack <= 2;
+    const impactY = roomy ? 560 : 626;
+    const cardTop = roomy ? 626 : 666;
+    const cardH = 906 - cardTop;
+    const stackBottom = impactY - 16;
+    const g = {
+      tier, rowH, gap, laneW,
+      stackH: stackBottom - 280,
+      stackBottomOffset: 906 - stackBottom,
+      incomingOffset: (impactY + 8) - 280,
+      cardTopOffset: cardTop - 280,
+      cardH, nameW: laneW - 40, barW: laneW - 40,
+      tokenW: (laneW - (cols - 1) * gap) / cols,
+      pipSize: tier === 'B' ? 8 : 7,
+      codeSize: tier === 'B' ? 21 : 19,
+      abbrSize: tier === 'D' ? 16 : 17,
+      arcTop: impactY - 40,
+      arcLabelTop: impactY - 36,
+      arcLabel: staging ? 'NO RANGE' : phase.toUpperCase(),
+      arcPath: phase === 'long' ? 'M 0 46 Q 865 26 1730 46' : phase === 'short' ? 'M 0 40 Q 865 60 1730 40' : 'M 0 42 Q 865 20 1730 42'
+    };
+
+    const lanes = FLEET.map((s, i) => {
+      const list = staging ? [] : byTarget[s.id];
+      const liveList = list.filter(w => !w.destroyed);
+      const dmg = liveList.reduce((n, w) => n + HULL[w.hull].dmg, 0);
+      const bp = liveList.reduce((n, w) => n + (HULL[w.hull].bp || 0), 0);
+      const targeted = liveList.length > 0;
+      const shown = list.slice(0, capacity);
+      const overflow = list.length - shown.length;
+
+      const rows = [];
+      shown.forEach((w, k) => {
+        const r = Math.floor(k / cols);
+        if (!rows[r]) rows[r] = { tokens: [] };
+        rows[r].tokens.push(this.tokenView(w, phase, g, laneW));
+      });
+
+      const boardingDim = phase === 'boarding' && bp === 0;
+      const spineH = targeted ? g.cardTopOffset - g.stackH + 6 : 0;
+
+      return {
+        id: s.id, index: s.index, name: s.name, sec: s.sec, color: s.color, sym: `#ship-${s.id}`,
+        x: 95 + i * (laneW + 18),
+        rows, targeted, quiet: !targeted, dmg, bp, hasBp: bp > 0 && !staging, hasGlyph: true,
+        overflow: overflow > 0, overflowLabel: `+${overflow} MORE`,
+        opacity: boardingDim ? 0.4 : 1,
+        wash: hexA(s.color, staging ? 0.02 : targeted ? 0.07 : 0.02),
+        washEdge: hexA(s.color, targeted && !staging ? 0.5 : 0.15),
+        spineW: Math.max(2, Math.min(10, dmg)),
+        spineTop: g.stackH,
+        spineH,
+        spineColor: targeted ? hexA('#FF3B2E', 0.75) : 'transparent',
+        marker: staging ? '—' : targeted ? '▼' : '·',
+        incomingColor: targeted && !staging ? ALERT : GHOST,
+        quietLabel: staging ? 'AWAITING TARGETS' : 'NO CONTACT',
+        bpBg: 'rgba(255,59,46,0.9)', bpColor: '#0A0D1A',
+        cardBorder: targeted && !staging ? `2px solid ${ALERT}` : `1px solid ${RULE}`,
+        cardGlow: targeted && !staging ? 'inset 0 0 0 999px rgba(255,59,46,0.05)' : 'none',
+        indexColor: targeted && !staging ? s.color : hexA(s.color, 0.55),
+        nameColor: targeted && !staging ? '#DCE6F2' : DIM,
+        glyphAlpha: targeted && !staging ? 0.9 : 0.45,
+        dmgTaken: s.damage,
+        dmgTakenColor: s.damage > 0 ? ALERT : GHOST,
+        dmgPct: Math.min(100, Math.round(s.damage / s.sec * 100)),
+        dmgBarColor: s.damage / s.sec > 0.6 ? ALERT : hexA(s.color, 0.8)
+      };
+    });
+
+    const liveWolves = wolves.filter(w => !w.destroyed);
+    const tally = Object.keys(HULL).map(k => ({ code: HULL[k].code, n: liveWolves.filter(w => w.hull === k).length })).filter(t => t.n > 0);
+    const nDead = wolves.length - liveWolves.length;
+    const committed = liveWolves.reduce((n, w) => n + HULL[w.hull].dmg, 0);
+
+    return {
+      g, lanes, tally, staging,
+      pool: staging ? wolves.slice().sort(order).map(w => this.tokenView(w, phase, { ...g, tier: 'B' }, 240)) : [],
+      destroyedLabel: nDead > 0 ? `${nDead} DESTROYED` : 'NONE DESTROYED',
+      committed, overCap: committed > 16,
+      phases: PHASES.map(p => {
+        const on = p.toLowerCase() === phase;
+        return {
+          label: p, dot: on ? 16 : 8,
+          dotColor: on ? CYAN : PHASES.indexOf(p) < PHASES.indexOf(phase.toUpperCase()) ? DIM : RULE,
+          glow: on ? '0 0 16px 6px rgba(127,216,240,0.45)' : 'none',
+          size: on ? 30 : 26, weight: on ? 700 : 400,
+          color: on ? '#DCE6F2' : PHASES.indexOf(p) < PHASES.indexOf(phase.toUpperCase()) ? DIM : RULE
+        };
+      })
+    };
+  }
+}
+
+</script>
+</body>
+</html>

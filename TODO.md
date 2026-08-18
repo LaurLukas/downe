@@ -907,7 +907,7 @@ scripts) since this environment can't screenshot a live Godot window - visual
 QA has to come from the user actually looking at it, which is what happened
 here and is why there's a v2 pass below.
 
-## Next up — Wolf Attack TV display v2: close the gap spec
+## Done (superseded in part by v3 below) — Wolf Attack TV display v2: close the gap spec
 
 The user did a proper side-by-side pass against `Wolf_Ships-selection.png`
 and wrote it up as `wolf_attack_tv_display_v2_gap_spec.md` (repo root) -
@@ -985,18 +985,44 @@ name.
       `short_name` field, which is plain display-string data, same
       category as `display_name` already living there.
 
-      **Deliberately not done in this pass** (left for a follow-up, not
-      forgotten): `P1-10`/`P1-14` (filled solid-silhouette icons authored
-      as `.svg` assets) - kept the existing `ship_icon.gd` hand-drawn
-      stroke-outline `_draw()` icons from the v1 pass instead, since they
-      already give a distinct shape per hull/ship and authoring real SVG art
-      isn't more tractable here than the code that's already working; **all
-      of P2** (`P2-21`..`P2-24`: glow, dash-offset animation, pulse,
-      cross-fade) - explicitly the polish tier, ordered last in the spec's
-      own priority list; the P0-08 "route it through the host console
-      instead" follow-up for the removed debug lines - not built, just
-      removed, since that's a new host-console feature, not a TV-side fix.
-- [ ] **P1 remaining**: `P1-10`/`P1-14` (see above).
+      **Deliberately not done in this pass**: **all of P2** (`P2-21`..
+      `P2-24`: glow, dash-offset animation, pulse, cross-fade) -
+      explicitly the polish tier, ordered last in the spec's own priority
+      list; the P0-08 "route it through the host console instead"
+      follow-up for the removed debug lines - not built, just removed,
+      since that's a new host-console feature, not a TV-side fix.
+
+      `P1-10`/`P1-14` (filled/silhouette ship icons) landed in a follow-up
+      round: the user hand-authored real `.svg` art for all 12 ships (6
+      Wolf hull classes + 6 fleet ships) under `res://svg/` and asked for
+      it to replace the v1/v2 placeholder icons. `ship_icon.gd` was
+      rewritten from a hand-drawn `_draw()`-per-class vector artist into a
+      texture loader: one `Dictionary[String, Texture2D]` of
+      `preload()`s, `_draw()` now just fits the right texture into the
+      Control's rect (aspect-preserved, centered) via `draw_texture_rect`.
+      `icon_color` still exists and is passed through as a modulate
+      multiply rather than dropped - the SVGs already bake in a color per
+      ship close to `WolfAttackTokens.SHIP_COLOR`/`INK`, so passing those
+      same tokens through is close to a no-op most of the time, and it's
+      what makes the "destroyed" wolf-ship dim state (multiplying by the
+      dark `INK_GHOST`) keep working without a special case. `line_width`
+      (unused by any caller) was dropped along with the old stroke-drawing
+      code.
+
+      Also fixed, from direct user feedback on the running P0 build: the
+      backdrop is a flat `WolfAttackTokens.BG_DEEP` fill now, not the
+      gradient+bloom `wolf_backdrop.gd` built for `P0-03` ("do the whole
+      background in a single dark color") - the gradient/bloom code was
+      simple enough to leave in place but is currently unused; and the
+      wolf force row was stretching a single ship across the entire
+      screen width, or would have badly crushed a large attack (a real
+      attack can field up to ~20 wolf ships, not just the reference
+      image's 6) - `WolfForceRow` changed from an `HBoxContainer` with
+      `SIZE_EXPAND_FILL` children to an `HFlowContainer` (`alignment =
+      ALIGNMENT_CENTER`) with a fixed 180px item width, so N ships wrap to
+      more rows instead of stretching or squeezing, matching spec §4.5
+      step 9's intent ("the row must survive N ≠ 6") without the spec's
+      more granular per-count threshold rules.
 - [ ] **P2 - polish**: fake glow on the active band arc/targeted
       cards/active phase dot (`P2-21`); dash-offset travel animation on
       attack vectors (`P2-22`); slow pulse on targeted card borders
@@ -1024,3 +1050,180 @@ resolved by the spec author):
    (already on the project's open-questions list) - determines whether
    `FleetRow` needs to handle more than 6 cards. Build it N-capable
    regardless, per the spec, but tune spacing for 6 until answered.
+
+## Next up — Wolf Attack TV display v3: lane layout (replaces v2's WolfForceRow/AttackVectors)
+
+The user watched the v2 build with a bigger wolf roster and it fell apart -
+a wide attack wraps the single wolf row to a second line, and the bezier
+vectors from row 2 pass straight through row 1's tokens and cross each
+other, so the one thing this screen exists to show (which wolf is hitting
+which ship) stops being readable at exactly the moment it matters most (high
+pursuit, big attack). The fix is a full handoff folder:
+`ui/design_handoff_wolf_attack_lanes/` - **read `wolf_attack_tv_display_v3_lanes.md`
+in there directly before starting**, it's the authoritative spec (rationale,
+exact geometry, scaling tables, phase behavior, data contract, acceptance
+checklist, open questions). `README.md` in the same folder is a slightly
+denser restatement with a couple of extra visual details (e.g. the backdrop
+recipe, exact type scale). `Wolf Attack Lanes.dc.html` + `support.js` is a
+browser-openable HTML/JS prototype - **not production code to port**, but
+its logic class is reference pseudocode for lane grouping/tier
+selection/ordering, and it's driven by editable `scenario`/`phase` props at
+the top of `renderVals()` so every acceptance-checklist roster can actually
+be looked at before committing to layout choices. `Wolf Ships.dc.html` is
+the superseded v2 screen plus a silhouette reference sheet - silhouette
+intent only, not the layout to build.
+
+`svg/` in that folder is now the **only** copy of the 12 ship silhouettes -
+`res://svg/` (the v2 SVG pass's original location) has been removed on the
+user's explicit instruction, and `ship_icon.gd` preloads directly from
+`res://ui/design_handoff_wolf_attack_lanes/svg/` instead. That means this
+handoff folder is no longer just reference material sitting next to
+production code (unlike `wolf_attack_tv_display_v2_gap_spec.md`/
+`Wolf_Ships-selection.png`, which are) - its `svg/` subfolder specifically
+is a live asset dependency. Whoever builds v3 should keep that in mind if
+this folder ever gets tidied away or archived once the lane redesign
+lands - moving/deleting it again will silently break every `ShipIcon`
+preload the same way it did the first time (caught and fixed mid-session;
+see git history around the v3 TODO.md entry for the full story).
+
+**The core rule** (spec §1): *a wolf ship is drawn inside its target's lane;
+adjacency replaces vectors.* Six capital ships → six vertical lanes, wolves
+stack bottom-aligned above their target's card, growing upward. Nothing
+crosses at any ship count, and stack height becomes a threat histogram
+readable in under a second from across the room. Two things this buys, and
+why they're deleted: `→ SHIPNAME` on each wolf token is redundant (the lane
+says it) and the fleet card's attacker-chip row (`SC` `CR` `DE`...) is
+redundant (the stack above the card *is* that list, with hull state
+included) - both removals free the space the stacks need.
+
+**Supersedes v2's layout only** - v2's design tokens/palette/type scale
+(§2), backdrop/header/pursuit meter/phase rail (§4.1-4.4), footer (§4.9) and
+Godot implementation notes (§7) are explicitly still in force and don't need
+rebuilding, just reusing from `wolf_attack_tokens.gd` etc. **Deleted**
+(v3 spec §7): the bezier `AttackVectors` node and its `_draw()` entirely; the
+`→ SHIPNAME` target line on wolf tokens; the fleet card's attacker-chip row;
+the `LONG`/`MEDIUM`/`SHORT` gutter labels and dashed dividers from
+`range_bands.gd` (range is now one continuous labelled arc, not three
+spatial bands); the single wide `WolfForceRow` `HBoxContainer`. **Kept on
+the card**: the `N BP` chip (boarding is its own phase, stays visible in two
+places). **Moved**: `SEC N` goes inside the card's top-right corner, since
+the space above the card is now the spine's entry point.
+
+**New pieces to build**:
+- `LaneRow` (`HBoxContainer`, replaces `WolfForceRow` + `FleetRow` combined)
+  of `Lane` controls, each holding a `Wash` (colored `ColorRect` over the
+  stack zone only, binds a stack to its card without a line), a `Stack`
+  (bottom-aligned, **manual positioning, not a `VBoxContainer`** - per spec
+  §11, `VBoxContainer` grows from the top and fights bottom-alignment), a
+  `Spine` (one vertical `ALERT` bar per lane, width `clamp(incoming_damage,
+  2, 10)`, from stack bottom through the card's top edge - the only vector
+  graphic left, and it can't cross another one), an `IncomingLine` (derived
+  `▼ N DMG` / `NO CONTACT` / `— AWAITING TARGETS` summary), and the
+  restyled `FleetCard`.
+- `StagingPool` - visible only during `targeting`, before any wolf has a
+  `target_ship_id`. A centred grid ignoring lane boundaries; as the host
+  resolves targets, each wolf **tweens from its pool position into its
+  lane** (0.35s, staggered 60ms if many resolve at once) - "watching the
+  columns build is the spectacle this phase should have."
+- `ImpactArc` - one continuous curve across the full width (not per lane,
+  not three bands like v2's `RangeBands`), tweens its control point ±14px
+  on phase change.
+- `WolfTally` - new one-line aggregate at y=248: `BS×1  SC×1  CR×4  ·  3
+  DESTROYED`, live-hull counts only, always derived, never stored. Fills
+  the gap left by deleting the per-token target line as the thing players
+  read to decide what to shoot during Short range.
+
+**Scaling is the part that has to be right** (spec §5) - two independent
+axes, `n_lanes` (fleet size) and `max_stack` (busiest lane), computed
+together; **the tier comes from the busiest lane and applies to every
+lane** (uniform token size is what makes the histogram valid - do not size
+lanes independently). Five tiers from `max_stack`: 1-3 → full 100px tokens
+(A), 4-8 → compact 34px (B), 9-16 → compact 30px in 2 columns (C), 17-24 →
+compact 26px in 3 columns (D), 25+ → same as D plus a `+N MORE` overflow
+chip. All tiers are sized to fit the 332px stack zone exactly (worked
+arithmetic is in spec §5.1 - use it, don't re-derive). Multi-column lanes
+fill bottom-up/left-to-right so the ragged edge sits at the top, reading as
+depth. At `max_stack ≤ 2` the impact line rises and cards grow to 280px
+instead of leaving dead air; at `n_lanes ≤ 4` lanes cap at 380px wide and
+centre rather than stretching. Below 150px lane width cards lose their
+index number and icon; below 120px, stop and flag to the host rather than
+silently wrapping to two rows of lanes.
+
+**Token identity matters more here than in v2** - wolf counts change every
+phase, so per spec §11: pool ~24 `WolfToken` instances up front and
+show/hide + reposition rather than `queue_free()`/re-instantiate on every
+push (visible hitching otherwise); match tokens by `uid` across pushes and
+tween them to their new slot, never rebuild the stack from scratch, "or
+every token jumps and the room loses track of the ship it was watching."
+Ordering within a lane, bottom (nearest card) to top: live wolves by
+descending damage capacity, ties broken stably by `uid`, then destroyed
+wolves same sort at the top - destroyed hulls sinking to the top keeps the
+histogram honest (stack height = total commitment, the dense band at the
+bottom = what's still coming).
+
+**Data contract deltas** (spec §9, on top of v2 §5): `wolf_ships[].destroyed`
+is now required explicit (not inferred from `damage_taken == capacity`);
+`target_ship_id: ""` during targeting routes a wolf to the staging pool
+instead of a lane; `fleet_ships[].attackers` is **removed** - the lane
+derives that list instead of the view pre-computing it. `core/` stays
+exactly as clean as v2 asked: lane grouping, tier selection and
+`incoming_damage`/`incoming_bp` are view-layer derivations from the flat
+snapshot, cached on the lane row and invalidated on push (not recomputed
+per frame), and `incoming_damage` must be labeled as a **projection** (what
+lands if the fleet destroys nothing more this phase), never as committed
+fact - "exactly the arithmetic the host should not be doing in their head."
+
+**Real bugs to fix alongside the rebuild** (spec §12, evidently seen on a
+screenshot of the actual v2 build, not just theoretical) - check each
+against the current code before assuming it's already handled:
+1. `10 CAP · 87 COMMITTED` - the P0 pass added a `push_error` assertion in
+   `_refresh_stat_line()` for `committed > cap`, but not the visual
+   `CAP EXCEEDED` chip (mono 18px `#FFC53D`, filled `rgba(255,197,61,0.16)`,
+   1px `#FFC53D` border) or a host-console-visible warning the spec now
+   also asks for - both still open.
+2. Every wolf in that screenshot was a Battlestation (15 × 6 capacity = 90
+   against a cap of 10) - suggests whatever roster generator produced that
+   test data always picks the first hull in the table instead of sampling
+   the attack-scaling formula from `open_questions_answered.md`. Not
+   necessarily this project's code (could be the design prototype's own
+   synthetic-roster generator) - **investigate which generator produced
+   it** before assuming `core/`'s is broken.
+3. Destroyed-token rendering: v3 §4.4 wants the whole token dimmed
+   (`alpha 0.3`) while *keeping* its code/pips/colour cues plus a
+   strikethrough, not replacing the ability line with `DESTROYED` and
+   losing the color entirely the way the current `_build_wolf_item()`
+   does. This is an explicit v3 behavior change, not just a bug fix - the
+   README's version of §4.4 goes further still ("do not stack alpha on
+   alpha - keep the token at full opacity and express death in colour"),
+   so **reconcile the README vs. the .md spec's own wording on this one
+   point** before implementing (they disagree on whether the *token* or
+   just its *contents* should dim).
+4. `TARGETING WRAPS` allegedly rendered behind the fleet cards in that
+   screenshot - the current build already positions it at y≈940, below the
+   card band (which ends at 898), so this may already be fixed; verify
+   against a live run rather than assuming either way.
+5. Fleet cards 3 and 5 reportedly had no border while the others did, all
+   six should use the same `card_idle`/`card_targeted` styling with no
+   third state - also worth a live-run check before assuming it's stale.
+
+**Open questions - do not guess** (spec §14, carried forward plus one new):
+1. `BS`/`CR` ability labels at Long range - still not in any reference.
+2. Gorgoneion/Vulcan footer rules.
+3. Signature colors for Endeavour, Maliades, Pallas, Voyage 33-0.
+4. Whether small ships appear on the targeting table - now directly sets
+   `n_lanes`, the highest-value open question for this screen specifically.
+5. **NEW - can a single wolf ship split its attack across two targets?**
+   Every wolf card in the source material reads "damage to target,"
+   singular, which is what makes the one-wolf-one-lane partition clean. If
+   any hull or event can hit two ships, a wolf would need to appear in two
+   lanes and the whole partition breaks. **Confirm against the Facilitator
+   Guide before locking this design** - per the spec's own instruction, not
+   just this file's usual caution.
+
+**Acceptance checklist** (spec §13) is the real verification target once
+built - synthetic rosters at 3/8/15/24/30 wolves, 4 and 10 lanes, and a
+12-wolves-on-one-ship case, checking that the tallest stack is always the
+most-attacked ship, destroyed wolves stay visibly dead but counted, phase
+changes re-derive every ability label with no state push, and a host
+reassigning a target from the admin console actually moves the token to
+its new lane rather than the lane layout being a read-only derivation.

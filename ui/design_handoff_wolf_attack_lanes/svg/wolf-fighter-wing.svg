@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 174 80" width="348" height="160">
+  <title>Wolf FW — fighter wing</title>
+  <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+    <polygon points="60,30 96,36 60,42 68,36"></polygon>
+    <polygon points="16,10 48,17 16,24 24,17"></polygon>
+    <polygon points="16,48 48,55 16,62 24,55"></polygon>
+    <polygon points="104,10 132,16 104,22 111,16"></polygon>
+    <polygon points="104,50 132,56 104,62 111,56"></polygon>
+  </g>
+</svg>

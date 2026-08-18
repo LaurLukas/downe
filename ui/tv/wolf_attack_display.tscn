@@ -116,12 +116,15 @@ anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("5")
 
-[node name="WolfForceRow" type="HBoxContainer" parent="Root/StandingPanel"]
+[node name="WolfForceRow" type="HFlowContainer" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 offset_left = 95.0
 offset_top = 250.0
 offset_right = 1825.0
 offset_bottom = 460.0
+alignment = 1
+theme_override_constants/h_separation = 24
+theme_override_constants/v_separation = 20
 
 [node name="AttackVectors" type="Control" parent="Root/StandingPanel"]
 unique_name_in_owner = true

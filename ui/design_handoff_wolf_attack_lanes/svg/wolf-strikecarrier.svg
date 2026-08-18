@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 174 80" width="348" height="160">
+  <title>Wolf SC — strikecarrier</title>
+  <g fill="#0A0D1A" stroke="#EDE4D6" stroke-width="2.5" stroke-linejoin="miter">
+    <polygon points="16,26 104,20 146,30 168,32 148,38 168,44 146,46 104,56 16,50"></polygon>
+    <polygon points="70,8 104,11 108,20 66,26"></polygon>
+    <rect x="82" y="2" width="7" height="8"></rect>
+    <rect x="4" y="22" width="14" height="32"></rect>
+    <polygon points="104,56 132,56 122,66 104,62"></polygon>
+  </g>
+</svg>
