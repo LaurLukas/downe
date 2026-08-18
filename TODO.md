@@ -910,7 +910,7 @@ here and is why there's a v2 pass below.
 ## Done (superseded in part by v3 below) — Wolf Attack TV display v2: close the gap spec
 
 The user did a proper side-by-side pass against `Wolf_Ships-selection.png`
-and wrote it up as `wolf_attack_tv_display_v2_gap_spec.md` (repo root) -
+and wrote it up as `wolf_attack_tv_display_v2_gap_spec.md` (`docs/`) -
 **read that file directly before starting**, it has exact pixel coordinates,
 hex colors, font sizes and a full priority-ordered checklist; this entry is
 just a pointer into it, not a substitute. It explicitly *supersedes v1's
@@ -1084,7 +1084,7 @@ came from the printed cards themselves, not the Guide):
    entry the same way is the consistent choice once Small Ships exist as
    `core/` objects.
 3. [~] **Signature colors - the 6 core ships are now answered, the 4
-   remaining craft/small ship are not.** New `ship_colors.md` (repo root)
+   remaining craft/small ship are not.** New `ship_colors.md` (`docs/`)
    gives the canonical six, sourced from `wolf_attack_tv_visual_redesign.md`
    §5.1: AEGIS `#CFE4F5`, Dione `#A97BFF`, Icebreaker `#E8873C`, Quellon
    `#46D6C0`, Shepherd `#7FD46A`, Refinery 124 `#F2D04A` - each hue tied to
@@ -1116,7 +1116,226 @@ came from the printed cards themselves, not the Guide):
    `n_lanes` is always exactly 6 - Small Ships are never valid Wolf Attack
    targets, full stop, not just "probably not."
 
-## Next up — Wolf Attack TV display v3: lane layout (replaces v2's WolfForceRow/AttackVectors)
+## Done (structural pass; polish deferred) — Wolf Attack TV display v3: lane layout
+
+**Landed**: the full lane rebuild described below - `LaneRow` of per-ship
+`Lane` controls (`Wash`, manually-positioned `Stack`, `IncomingLine`,
+restyled `FleetCard`), a single-`_draw()` `LaneSpines` overlay replacing
+the bezier `AttackVectors`, a single-`_draw()` `ImpactArc` replacing the
+three-band `RangeBands`/gutter labels, the `§8` wolf force tally, and a
+structurally-correct (if practically unreachable, see below) staging
+pool. `range_bands.gd` and `targeting_lines.gd` are deleted per the
+spec's own §7 instruction, not just unused.
+
+**New files**: `ui/tv/wolf_lane_layout.gd` (`WolfLaneLayout`, `RefCounted`,
+zero Node dependency) holds every derivation the spec's §11 says belongs
+outside `core/` but is still pure enough to unit-test headlessly - lane
+grouping, tier selection (`§5.1`'s A/B/C/D/D+ table), the
+descending-capacity/ascending-uid/destroyed-sink-to-top ordering rule,
+bottom-up-left-to-right multi-column slot math, overflow-chip slot
+reservation, and the two projected-incoming numbers (damage, boarding
+parties). `tests/ui/wolf_lane_layout_test.gd` (29 tests) covers all of
+it directly, including a regression guard for a real bug this pass found
+(see below). 38 test files total, still all green.
+`ui/tv/impact_arc.gd`, `ui/tv/lane_spines.gd`, `ui/tv/strike_through.gd`
+are the new small single-purpose `Control`s, matching this project's
+existing pattern (`WolfCodePips`, `ShipIcon`).
+
+**A design decision the spec left open, resolved by the user**: the .md
+spec and its own README disagreed on destroyed-token rendering - whole-
+token `alpha 0.3` + strikethrough (`.md` §4.4) vs. full opacity with only
+the contents dimmed (README). The user's explicit call was the former;
+`WolfCodePips` was extended so a destroyed token renders with **every**
+pip hollow (not just the ones matching `damage_taken` at the moment it
+died), matching the "nothing remains" reading the `.md` spec asks for.
+
+**Real bugs caught before this ever reached a live window** (this
+project has no way to screenshot a running Godot instance, so a headless
+driving script - `verify_v3.gd`, deliberately not committed, matching
+this project's established "throwaway diagnostic" pattern - instantiated
+the real `wolf_attack_display.tscn` against synthetic rosters at every
+acceptance-checklist tier, including a 30-wolves-on-one-ship case built
+specifically to force the D+ overflow chip):
+- `StyleBoxFlat` has no `set_content_margin_individual()` - the real API
+  is `set_content_margin(side, value)` per side. Would have crashed the
+  very first compact token drawn in real play.
+- `ImpactArc._draw()` assigned `Dictionary.get()`'s `null` miss straight
+  into a strictly-typed `Dictionary` var, which GDScript rejects before
+  the following `null` check ever runs - fixed to check `CURVES.has()`
+  first. Harmless today only because `queue_redraw()` never fires for an
+  invisible node in the phases where this would have mattered; still a
+  real crash waiting for the first code path that changes that.
+- A boolean built from three chained `Variant` dictionary lookups
+  (`phase == ... and wolf["class"] == ... and not wolf["destroyed"]`)
+  failed static type inference outright - GDScript couldn't prove the
+  expression was a `bool`. Fixed by typing the two dictionary reads
+  first. Not a runtime bug, a straight compile failure - would have
+  blocked the scene from loading at all.
+- The damage bar's fill `ColorRect` set only `anchor_right`, leaving
+  `anchor_bottom` at its default (0), which gives the fill zero height -
+  every fleet card's damage bar would have rendered as an invisible
+  sliver.
+- Adding the destroyed-state `StrikeThrough` overlay as a direct child of
+  the token's own `VBoxContainer`/`PanelContainer` would have made that
+  *container* try to lay it out as another row/item instead of drawing it
+  on top - fixed by wrapping token content in a plain `Control` holder so
+  the strikethrough can sit as an independent anchored sibling.
+- `WolfLaneLayout.incoming_bp_for_lane()` deliberately does **not** reuse
+  `WolfAttackView`'s own `"boarders"` field - that field is only
+  populated while `attack.phase` is one of the three range phases
+  (`_build_wolf_ships`'s `in_range_phase` gate), so it always reads 0
+  during `"targeting"` even for an Assault Transport that already has a
+  target. Derived from the hull constant instead, so the incoming line is
+  correct at every STANDING phase, targeting included - the same class of
+  gap the v2 fleet card's boarding chip had already hit once before (see
+  the P0/P1 entry above), caught here by a dedicated regression test
+  (`test_incoming_bp_ignores_core_range_phase_gating`) rather than by
+  someone noticing a blank number on a live screen.
+
+**Two more spec inconsistencies resolved in favor of the stated formula
+over an unreconciled table number**, same reasoning already applied once
+in this project (choosing `lane_width`'s formula over its own table,
+which don't actually agree for `n≠4` - see the "Open questions" entries
+below): the incoming line's y-offset uses the README's explicit
+`impactY + 8` rather than the `.md` table's unexplained `652`, and the
+wolf tally omits `N DESTROYED` when zero (the `.md`'s own rule) rather
+than showing README's "NONE DESTROYED".
+
+**Deliberately not built, documented rather than silently skipped** (see
+`wolf_attack_display.gd`'s own file-header comment):
+- **Token pooling and the targeting-phase tween-from-staging-pool
+  spectacle** (§6.1/§11). This project's established pattern for a first
+  structural pass is data/geometry-correct now, animation polish later
+  (the v2 P0/P1/P2 split did the same) - a tween's feel can't be judged
+  without a human watching a live window. Every lane rebuilds fresh each
+  refresh, same as v2's `WolfForceRow`/`FleetRow` always did.
+- **The staging pool is structurally unreachable in this project's real
+  `WolfAttack` state machine**, not just unbuilt: targets are pre-rolled
+  the instant a wolf ship is added and revealed in full the moment the
+  attack leaves `Phase.INCOMING` (`WolfAttackView`'s `targets_visible`
+  gate), so no wolf ever actually reaches `"targeting"` with an empty
+  `target_ship_id`. The render path is still implemented correctly for a
+  wolf that genuinely has none - worth keeping in mind if `core/`'s
+  targeting flow ever becomes incremental instead of instant-reveal.
+- The impact arc's ±14px phase-change "settle" tween.
+- Everything already-known-blocked before this pass started: Gorgoneion/
+  Vulcan footer entries (Small Ships still aren't `core/` objects),
+  Endeavour/Maliades/Pallas/Voyage 33-0 signature colors, and the `BS`/
+  `CR` Long-range labels question (already closed - see below).
+
+**Verified**: `tests/ui/wolf_lane_layout_test.gd` unit-tests every pure
+derivation directly. The throwaway driving script exercised the actual
+`Control` tree end-to-end at 3/8/15/24 wolves spread normally, 12 and 30
+wolves concentrated on one ship (the latter specifically to force the D+
+tier's overflow chip - confirmed exactly 22 real tokens + 1 chip = 23
+stack children, matching the unit test's own prediction), across both
+`"targeting"` and a mid-range-phase state, checking lane count (always
+6) and per-lane token counts with no crashes. Not verified, and not
+verifiable without a human looking at a live window: actual pixel
+geometry/color fidelity, the acceptance checklist's "legible at 2m from a
+55\" panel" and "a stranger can point at a token and name its target
+without tracing anything" items, and anything covering the deferred
+tween/pooling behavior above.
+
+**A real bug my synthetic testing didn't catch, found from the user's own
+host-console use**: `_refresh_stat_line()` kept v2's `push_error("...
+committed exceeds cap ... should not be reachable")` call, and it fired
+in real logs the first time the host actually added a real-sized attack
+- 15 committed against a pursuit-0 cap of 10. My verification script's
+synthetic rosters happened to always test genuinely-broken states
+(30-on-one-ship, etc.) where an error was arguably expected noise, so
+this never stood out. It should never have been a `push_error` at all:
+the base-10-plus-pursuit cap is advisory context for the host, not an
+engine-enforced rule, and the Facilitator's Guide's own printed turn-1
+example ("10 Wolf Fighter Wings and 5 Wolf Assault Transports") exceeds
+a pursuit-0 cap of 10 on purpose - later attacks are sized by total
+damage capacity (15-24) with no reference to this formula at all.
+Removed the `push_error`; the CAP EXCEEDED chip (already built for
+spec §10.1) is the correct level of signal for this - visible to the
+host, not logged as if it were an engine bug.
+
+**Two more real bugs, both from the user actually looking at a live
+run** (neither showed up in the synthetic driving script, for two
+different reasons - worth internalizing for next time):
+- **Assault Transport read "PREVENTS 0 BP" instead of "PREVENTS 4 BP"**.
+  `WolfLaneLayout.ability_label_full()`/`ability_abbrev()` read core's
+  own `"boarders"` field directly for this one hull - the exact same
+  phase-gating gap already fixed once for `incoming_bp_for_lane()`
+  (`WolfAttackView` only populates `"boarders"` during a live range
+  phase, so it reads 0 during `"targeting"`), just missed in the two
+  label functions sitting right next to it. My driving script never
+  caught it because it only ever checked *counts* (lane count, token
+  count), never token *content* - a gap in what the script asserted, not
+  in what it exercised. Fixed by deriving the boarding-party count from
+  the hull constant in the label functions too, via a new shared
+  `_assault_transport_boarders()` helper; both label functions now agree
+  with `incoming_bp_for_lane()` by construction instead of by
+  coincidence. New regression test:
+  `test_ability_label_full_assault_transport_ignores_core_range_phase_gating`.
+- **Shepherd's lane sat in position 4 while its own card read "5", and
+  Quellon sat in position 5 while its card read "4"** - the two were
+  swapped. Lanes were built by iterating `view["fleet_ships"]`, itself
+  built from `ShipRegistry.all_ship_ids()`, which lists Shepherd before
+  Quellon (`ship_registry.gd`'s own `DISPLAY_NAMES` order - deliberate
+  for the Host Console/TV fleet-overview rows elsewhere in the project,
+  per CLAUDE.md's own Ships table using that same order). The Wolf Attack
+  Sheet's targeting-die order is different (4 Quellon, 5 Shepherd), and
+  each fleet card's *index number* was always computed correctly from
+  that table via `TARGETING_TABLE.find_key()` - only the lane's physical
+  left-to-right *position* used the wrong order. Harmless in v2 (a card
+  row with no positional meaning), but load-bearing in v3, whose entire
+  premise is "lane position tells you the ship" - a card sitting in the
+  wrong slot relative to its own printed number undermines exactly the
+  thing this rebuild exists to fix. My driving script never caught this
+  either: it checked lane *count*, never lane *order*. Fixed narrowly,
+  not by reordering `ShipRegistry` globally (which the rest of the
+  project intentionally relies on) - a new
+  `WolfLaneLayout.sort_fleet_ships_by_targeting_order()` re-sorts the
+  fleet-ship list by targeting-die index before lanes are built, scoped
+  entirely to this screen. New regression test:
+  `test_sort_fleet_ships_by_targeting_order_fixes_shepherd_quellon_swap`.
+
+Both fixes verified against the real running scene (not just the unit
+tests) with a second throwaway driving script: a single Assault
+Transport targeting AEGIS during `"targeting"` now shows "PREVENTS 4 BP"
+on its full-form token, and all six lanes now read index 1 through 6
+left to right in order.
+
+**A third real bug, this time from a screenshot** (`docs/Wolf_attack_v3_lanes.png`
+- the user pointed a camera at a real run, not just described symptoms):
+ability text (`SIEGE BATTERY`, `PREVENTS 1`, etc.) bled down out of the
+full-form wolf token and overlapped the impact arc and incoming-damage
+line below it. Root cause: `_build_full_token()`'s icon (52px) + code/pips
+row (34px) + ability `Label` (whatever an 18px font naturally needs) were
+all fixed guessed heights that summed to well over the tier's 100px slot
+- `VBoxContainer`'s children don't get clipped to their parent's actual
+rect when their combined minimum size exceeds it, so the ability text
+just kept drawing past the token's bottom edge into whatever was
+underneath. Neither driving script had caught this because both only
+ever checked *counts* (lanes, tokens per lane) - never a single token's
+actual rendered geometry - so this sat undetected through two rounds of
+"verified against the real running scene."
+
+Fixed by computing the icon's height as whatever's left over after the
+other two rows' *real* sizes, not by guessing all three up front:
+- The ability `Label` enforces its own true minimum size from Godot's
+  own font metrics (`Font.get_height()`) regardless of what it's asked
+  for, so that row has to use the real measured value or the label wins
+  the size fight and overflows again - confirmed via a headless script
+  that measured all three rows' actual combined minimum size afterward:
+  31.3 + 35.7 + 25.0 + 2×4 gap = 100.0px exactly, matching the 100px
+  slot with no residual overflow.
+- `WolfCodePips`, unlike the label, is a bare `Control` with no
+  intrinsic minimum size of its own (its `_draw()` just paints at fixed
+  offsets regardless of the rect it's given), so it doesn't need the
+  font's full technical line-height reserved for it either - a tight
+  `font_size × 1.05` is enough, and freeing that difference back to the
+  icon keeps it from shrinking more than necessary.
+- `holder.clip_contents = true` was added as a defensive backstop on top
+  of the real fix, not a substitute for it - if a future change to any
+  of these three rows' sizing ever drifts out of budget again, the worst
+  case is now a slightly cropped label, not text bleeding across
+  unrelated UI elements below it.
 
 The user watched the v2 build with a bigger wolf roster and it fell apart -
 a wide attack wraps the single wolf row to a second line, and the bezier
@@ -1286,7 +1505,7 @@ entry for the full source citations; summarized here):
    `core/` yet. Still open: footer visibility (always-shown vs.
    only-when-charged) - a UI convention the source never states.
 3. [~] **Signature colors** - the 6 core ships are answered by
-   `ship_colors.md` (repo root; see the v2 §9 entry above for the hex
+   `ship_colors.md` (`docs/`; see the v2 §9 entry above for the hex
    values, the identity-not-status rules, and the `wolf_attack_tokens.gd`
    reconciliation note). Endeavour, Maliades, Pallas, and Voyage 33-0 -
    the four this item was actually about - are still unanswered; that

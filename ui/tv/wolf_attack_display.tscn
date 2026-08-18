@@ -1,10 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://ui/tv/wolf_attack_display.gd" id="1"]
-[ext_resource type="Script" path="res://ui/tv/targeting_lines.gd" id="2"]
-[ext_resource type="Script" path="res://ui/tv/wolf_backdrop.gd" id="3"]
-[ext_resource type="Script" path="res://ui/tv/pursuit_meter.gd" id="4"]
-[ext_resource type="Script" path="res://ui/tv/range_bands.gd" id="5"]
+[ext_resource type="Script" path="res://ui/tv/wolf_backdrop.gd" id="2"]
+[ext_resource type="Script" path="res://ui/tv/pursuit_meter.gd" id="3"]
+[ext_resource type="Script" path="res://ui/tv/impact_arc.gd" id="4"]
+[ext_resource type="Script" path="res://ui/tv/lane_spines.gd" id="5"]
 
 [node name="WolfAttackDisplay" type="Control"]
 anchor_right = 1.0
@@ -48,7 +48,7 @@ size_flags_vertical = 3
 [node name="Backdrop" type="Control" parent="Root/StandingPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-script = ExtResource("3")
+script = ExtResource("2")
 
 [node name="StandingTitleLabel" type="Label" parent="Root/StandingPanel"]
 unique_name_in_owner = true
@@ -84,7 +84,7 @@ offset_left = 1372.0
 offset_top = 142.0
 offset_right = 1717.0
 offset_bottom = 168.0
-script = ExtResource("4")
+script = ExtResource("3")
 
 [node name="PursuitValueLabel" type="Label" parent="Root/StandingPanel"]
 unique_name_in_owner = true
@@ -107,46 +107,79 @@ unique_name_in_owner = true
 offset_left = 95.0
 offset_top = 202.0
 offset_right = 1825.0
-offset_bottom = 240.0
+offset_bottom = 234.0
 
-[node name="RangeBandsNode" type="Control" parent="Root/StandingPanel"]
+[node name="WolfTallyLabel" type="RichTextLabel" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+offset_left = 95.0
+offset_top = 240.0
+offset_right = 1400.0
+offset_bottom = 272.0
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+mouse_filter = 2
+
+[node name="RangeLabel" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+offset_left = 1500.0
+offset_top = 242.0
+offset_right = 1825.0
+offset_bottom = 270.0
+horizontal_alignment = 2
+
+[node name="ImpactArcNode" type="Control" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("4")
+
+[node name="LaneSpinesNode" type="Control" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("5")
 
-[node name="WolfForceRow" type="HFlowContainer" parent="Root/StandingPanel"]
+[node name="LaneRow" type="HBoxContainer" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 offset_left = 95.0
-offset_top = 250.0
+offset_top = 280.0
 offset_right = 1825.0
-offset_bottom = 460.0
-alignment = 1
-theme_override_constants/h_separation = 24
-theme_override_constants/v_separation = 20
+offset_bottom = 906.0
+theme_override_constants/separation = 18
 
-[node name="AttackVectors" type="Control" parent="Root/StandingPanel"]
+[node name="StagingPool" type="Control" parent="Root/StandingPanel"]
 unique_name_in_owner = true
-anchor_right = 1.0
-anchor_bottom = 1.0
+offset_left = 95.0
+offset_top = 280.0
+offset_right = 1825.0
+offset_bottom = 612.0
 mouse_filter = 2
-script = ExtResource("2")
 
-[node name="FleetRow" type="HBoxContainer" parent="Root/StandingPanel"]
+[node name="StagingPoolLabel" type="Label" parent="Root/StandingPanel/StagingPool"]
 unique_name_in_owner = true
-offset_left = 95.0
-offset_top = 648.0
-offset_right = 1825.0
-offset_bottom = 898.0
-theme_override_constants/separation = 24
+offset_top = 0.0
+offset_right = 1730.0
+offset_bottom = 24.0
+horizontal_alignment = 1
+
+[node name="StagingPoolFlow" type="HFlowContainer" parent="Root/StandingPanel/StagingPool"]
+unique_name_in_owner = true
+offset_top = 30.0
+offset_right = 1730.0
+offset_bottom = 330.0
+alignment = 1
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
 
 [node name="PhaseBanner" type="Label" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 offset_left = 95.0
 offset_top = 906.0
 offset_right = 1825.0
-offset_bottom = 936.0
+offset_bottom = 932.0
 horizontal_alignment = 1
 autowrap_mode = 2
 
@@ -154,7 +187,7 @@ autowrap_mode = 2
 unique_name_in_owner = true
 anchor_left = 0.0
 anchor_right = 1.0
-offset_top = 940.0
+offset_top = 944.0
 offset_bottom = 966.0
 text = "TARGETING WRAPS · 7 → 1 · 0 → 6"
 horizontal_alignment = 1
@@ -162,17 +195,17 @@ horizontal_alignment = 1
 [node name="CannotBeTargetedLabel" type="Label" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 offset_left = 95.0
-offset_top = 985.0
+offset_top = 982.0
 offset_right = 500.0
-offset_bottom = 1009.0
+offset_bottom = 1006.0
 text = "CANNOT BE TARGETED"
 
 [node name="CannotBeTargetedRow" type="HBoxContainer" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 offset_left = 95.0
-offset_top = 1020.0
+offset_top = 1018.0
 offset_right = 1825.0
-offset_bottom = 1060.0
+offset_bottom = 1058.0
 theme_override_constants/separation = 40
 
 [node name="BoardingPanel" type="VBoxContainer" parent="Root"]

@@ -166,7 +166,7 @@ independent resources (see `resources.md`). "Endeavour", "Maliades", and
 
 Fourteen shuttles and three fighter wings, each docked at one of the six
 ships above and operated by a named role. Not yet built in `core/` - see
-`downe_shuttle_implementation_prompt.md` for the full roster, shared
+`docs/downe_shuttle_implementation_prompt.md` for the full roster, shared
 ability system, and combat profiles. Of note: Endeavour (Shepherd's
 scout), Maliades (Dione's escort fighter), and Pallas (AEGIS's assault
 shuttle) share names with nothing else in the game - they are craft, not

@@ -50,9 +50,9 @@ const CARD_BG := Color("#0E1424")
 const CARD_BG_TARGETED := Color("#1A0E14")
 const RULE := Color("#24303F")
 
-## Canonical values, not this file's own invention - see ship_colors.md
-## (repo root) for the full rationale (each hue tied to what the ship
-## supplies, "colour is identity never status", "no ship gets red").
+## Canonical values, not this file's own invention - see docs/ship_colors.md
+## for the full rationale (each hue tied to what the ship supplies,
+## "colour is identity never status", "no ship gets red").
 const SHIP_COLOR: Dictionary[String, Color] = {
 	"aegis": Color("#CFE4F5"),
 	"dione": Color("#A97BFF"),
@@ -112,6 +112,12 @@ const TYPE_SCALE: Dictionary[String, Dictionary] = {
 	"T_FOOTER_LABEL": {"family": Family.DATA, "size": 16, "bold": false, "spacing": 4.0},
 	"T_FOOTER_ITEM": {"family": Family.DATA, "size": 22, "bold": true, "spacing": 2.0},
 	"T_FOOTER_VALUE": {"family": Family.DATA, "size": 20, "bold": false, "spacing": 2.0},
+	# v3 lane layout additions (§8/§10.1 header zone).
+	"T_TALLY": {"family": Family.DATA, "size": 24, "bold": true, "spacing": 1.0},
+	"T_RANGE_LABEL": {"family": Family.DISPLAY, "size": 22, "bold": true, "spacing": 4.0},
+	"T_INCOMING_NUM": {"family": Family.DATA, "size": 26, "bold": true, "spacing": 0.0},
+	"T_COMPACT_CODE": {"family": Family.DATA, "size": 19, "bold": true, "spacing": 1.0},
+	"T_COMPACT_ABILITY": {"family": Family.DATA, "size": 17, "bold": true, "spacing": 1.0},
 }
 
 static func _variation(family: Family, bold: bool, spacing: float) -> FontVariation:
@@ -151,17 +157,28 @@ const Y_TITLE_BASELINE := 112.0
 const Y_STAT_LINE := 155.0
 const Y_HEADER_RULE := 190.0
 const Y_PHASE_RAIL := 217.0
-const Y_WOLF_SILHOUETTE_TOP := 250.0
-const Y_WOLF_SILHOUETTE_BOTTOM := 345.0
-const Y_WOLF_CODE_PIPS := 372.0
-const Y_WOLF_ABILITY := 414.0
-const Y_WOLF_TARGET := 452.0
-const Y_BAND_ARC_APEX := 452.0
-const Y_BAND_ARC_EDGE := 500.0
-const Y_VECTOR_ORIGIN := 505.0
-const Y_SEC_LABEL := 638.0
-const Y_FLEET_CARD_TOP := 648.0
-const FLEET_CARD_HEIGHT := 250.0
-const Y_WRAPS_LINE := 948.0
-const Y_CANNOT_LABEL := 985.0
-const Y_UNTARGETABLE_ROW := 1020.0
+
+# v3 lane layout (wolf_attack_tv_display_v3_lanes.md §2) - the zones below
+# replace v2's Y_WOLF_SILHOUETTE_*/Y_WOLF_CODE_PIPS/Y_WOLF_ABILITY/
+# Y_WOLF_TARGET/Y_BAND_ARC_*/Y_VECTOR_ORIGIN/Y_SEC_LABEL/Y_FLEET_CARD_TOP/
+# FLEET_CARD_HEIGHT (single wolf row + bezier vectors + gutter bands, all
+# deleted per §7). "Default" values are the normal case; at max_stack <= 2
+# WolfLaneLayout.stack_zone_geometry() returns the roomy-case override for
+# Y_IMPACT_DEFAULT/Y_CARD_TOP_DEFAULT/CARD_HEIGHT_DEFAULT instead - callers
+# read that dict, not these constants directly, once a snapshot is in hand.
+const Y_WOLF_TALLY := 248.0
+const Y_STACK_ZONE_TOP := 280.0
+const Y_IMPACT_DEFAULT := 626.0
+## README's explicit formula ("impactY + 8", a 26px-tall row) is used here
+## rather than the .md spec's single table value of 652 for this zone -
+## 626 + 8 = 634, not 652, and the two documents don't reconcile on this
+## one number. Trusting the stated formula over an unexplained table
+## number matches how this project already resolved v3's lane_width
+## table/formula mismatch (TODO.md) - not guessed, the formula is the
+## more explicit of the two sources.
+const Y_INCOMING_LINE_OFFSET := 8.0
+const Y_CARD_TOP_DEFAULT := 666.0
+const CARD_HEIGHT_DEFAULT := 240.0
+const Y_WRAPS_LINE := 944.0
+const Y_CANNOT_LABEL := 982.0
+const Y_UNTARGETABLE_ROW := 1018.0
