@@ -50,13 +50,16 @@ const CARD_BG := Color("#0E1424")
 const CARD_BG_TARGETED := Color("#1A0E14")
 const RULE := Color("#24303F")
 
+## Canonical values, not this file's own invention - see ship_colors.md
+## (repo root) for the full rationale (each hue tied to what the ship
+## supplies, "colour is identity never status", "no ship gets red").
 const SHIP_COLOR: Dictionary[String, Color] = {
-	"aegis": Color("#E6EDF7"),
-	"dione": Color("#8B5CF6"),
-	"icebreaker": Color("#C2703C"),
-	"quellon": Color("#2DD4BF"),
-	"shepherd": Color("#4ADE80"),
-	"refinery_124": Color("#E5B325"),
+	"aegis": Color("#CFE4F5"),
+	"dione": Color("#A97BFF"),
+	"icebreaker": Color("#E8873C"),
+	"quellon": Color("#46D6C0"),
+	"shepherd": Color("#7FD46A"),
+	"refinery_124": Color("#F2D04A"),
 }
 
 static func ship_color(ship_id: String) -> Color:

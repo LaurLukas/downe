@@ -1038,18 +1038,83 @@ modifier triplets) so the footer can cover more than just fighter wings.
 function in `core/` (derived from damage-if-destroyed-at-phase, not stored),
 which also makes it headlessly testable per the spec's §7 note.
 
-**Open items - do not guess, per CLAUDE.md** (spec §9, flagged rather than
-resolved by the spec author):
-1. `BS` and `CR` ability labels at **Long** range - not visible in either
-   reference image; verify against the Facilitator Guide before wiring.
-2. Gorgoneion shield value and Vulcan laser state derivation, and whether
-   they always appear in the footer or only when active.
-3. Signature colors for the small ships (Endeavour, Maliades, Pallas,
-   Voyage 33-0) - needed before they can appear on this screen at all.
-4. Whether small ships appear on the Wolf Attack targeting table at all
-   (already on the project's open-questions list) - determines whether
-   `FleetRow` needs to handle more than 6 cards. Build it N-capable
-   regardless, per the spec, but tune spacing for 6 until answered.
+**Open items - do not guess, per CLAUDE.md** (spec §9; flagged by the spec
+author, now checked against the real physical card set found at
+`C:\Users\lukas\Desktop\downe\DoWNE - A4 Double Sided v1.0 (1).pdf` - the
+Facilitator's Guide PDF itself only lists "Wolf Ship cards" as a
+battle-table component, it doesn't print their text, so the answers below
+came from the printed cards themselves, not the Guide):
+1. [x] **`BS`/`CR` ability labels at Long range - not a data gap, just an
+   image the spec author didn't have.** The printed Battlestation card has
+   no Long-range-specific line at all - its effect is "if destroyed at
+   **any** range: 3 damage to target" (it's simply immune at Short, per
+   `IMMUNE_PHASES` below) - while the printed Cruiser card is explicit:
+   "if destroyed during Long Range: **No effect**." Both match
+   `core/combat/wolf_ship_definitions.gd`'s `DAMAGE_IF_DESTROYED_AT`
+   table exactly (Battlestation `{LONG: 3, MEDIUM: 3, SHORT: -1}`, Cruiser
+   `{LONG: 0, MEDIUM: 1, SHORT: 2}`), as does every other hull's table
+   entry (Strikecarrier, Destroyer, Fighter Wing, Assault Transport) and
+   the boarding-party/returns/immune-phase flags. `core/` already has this
+   right - now triple-verified (source doc → brief's own PREVENTS
+   cross-check → the actual printed cards), nothing to change in code.
+2. **Gorgoneion shield value and Vulcan laser state - the abilities and
+   their exact numbers are now known; the footer display question is not.**
+   From the printed I.C.S.S. Gorgoneion and P.V. Vulcan craft cards:
+   - Gorgoneion's **Force Field Projector** (requires charged): before the
+     Targeting step, choose 1 ship; that ship's total damage taken this
+     attack is reduced by a flat **2**, applied once at end-of-attack
+     resolution. The "shield value" is not a derived or variable number -
+     it's a fixed -2, gated only on whether the console was charged that
+     turn (same charged/uncharged pattern as every other console in the
+     game).
+   - Gorgoneion's separate **Missile Array** (requires charged, offensive
+     not defensive): 3 dice at each of Long/Medium/Short range, 1 damage
+     per 6+/5+/4+ rolled, capped at 1 damage per individual target per
+     phase.
+   - Vulcan's **Laser Cannon** (requires charged): 2 dice at Medium and
+     Short range only (not Long), 1 damage per die on a 4+.
+   None of this is implemented in `core/` yet (confirmed via grep - only
+   file-comment placeholders reference Gorgoneion/Vulcan combat today),
+   consistent with Small Ships not being modeled as objects at all. Still
+   genuinely open: whether the footer shows these consoles' state
+   unconditionally or only when charged/relevant - the source never
+   addresses TV display conventions, only game rules - but by analogy
+   with how Fighter Wings already gate on their Fighter Bay's
+   charged/undamaged state before appearing in combat, gating the footer
+   entry the same way is the consistent choice once Small Ships exist as
+   `core/` objects.
+3. [~] **Signature colors - the 6 core ships are now answered, the 4
+   remaining craft/small ship are not.** New `ship_colors.md` (repo root)
+   gives the canonical six, sourced from `wolf_attack_tv_visual_redesign.md`
+   §5.1: AEGIS `#CFE4F5`, Dione `#A97BFF`, Icebreaker `#E8873C`, Quellon
+   `#46D6C0`, Shepherd `#7FD46A`, Refinery 124 `#F2D04A` - each hue tied to
+   what the ship *does* (ice-white command, ore ember, water aqua, food
+   leaf, fuel sulfur), plus the two derived-state rules ("colour is
+   identity never status", "no ship gets red - that's Wolves-only"), a
+   `--fleet-dim` destroyed-state color, and a ready-to-use
+   `res://core/ship_colors.gd` constants block. **Still open**: Endeavour,
+   Maliades, Pallas, and Voyage 33-0 (the small-ship/craft colors this
+   item was originally about) aren't in `ship_colors.md` either - it only
+   covers the 6 capital ships. [x] **Reconciled**: `ui/tv/wolf_attack_tokens
+   .gd`'s `SHIP_COLOR` dict previously used its own slightly different hex
+   values for the same six ships (e.g. Dione `#8B5CF6`, Icebreaker
+   `#C2703C`) - now updated in place to match `ship_colors.md` exactly, so
+   there's one canonical set of values even though they still live in two
+   files (the `.md` doc and this `ui/`-layer dict - no `core/ship_colors.gd`
+   was added, since the only current consumer is `ui/tv/wolf_attack_display
+   .gd`; revisit if ESP32/web clients ever need the same values, per
+   `ship_colors.md`'s own cross-surface-use section).
+4. [x] **Whether small ships appear on the Wolf Attack targeting table -
+   no, confirmed from the real player-facing rules sheet, not just
+   inferred.** Every team's "Rules Reference" card (e.g. the AEGIS
+   Admiral's Team Brief and Role Guide) prints the actual Targeting Table
+   handed to players: a 1d6 roll mapping 1-6 to the six core ships only
+   (`1 AEGIS, 2 Dione, 3 Icebreaker, 4 Quellon, 5 Shepherd, 6 Refinery
+   124`) - there is no 7th+ entry and no separate table for Small Ships or
+   craft. This matches `core/combat/wolf_ship_definitions.gd`'s
+   `TARGETING_TABLE` exactly. `FleetRow`/`LaneRow` can be built assuming
+   `n_lanes` is always exactly 6 - Small Ships are never valid Wolf Attack
+   targets, full stop, not just "probably not."
 
 ## Next up — Wolf Attack TV display v3: lane layout (replaces v2's WolfForceRow/AttackVectors)
 
@@ -1206,19 +1271,44 @@ against the current code before assuming it's already handled:
    six should use the same `card_idle`/`card_targeted` styling with no
    third state - also worth a live-run check before assuming it's stale.
 
-**Open questions - do not guess** (spec §14, carried forward plus one new):
-1. `BS`/`CR` ability labels at Long range - still not in any reference.
-2. Gorgoneion/Vulcan footer rules.
-3. Signature colors for Endeavour, Maliades, Pallas, Voyage 33-0.
-4. Whether small ships appear on the targeting table - now directly sets
-   `n_lanes`, the highest-value open question for this screen specifically.
-5. **NEW - can a single wolf ship split its attack across two targets?**
-   Every wolf card in the source material reads "damage to target,"
-   singular, which is what makes the one-wolf-one-lane partition clean. If
-   any hull or event can hit two ships, a wolf would need to appear in two
-   lanes and the whole partition breaks. **Confirm against the Facilitator
-   Guide before locking this design** - per the spec's own instruction, not
-   just this file's usual caution.
+**Open questions - do not guess** (spec §14, carried forward from v2's §9
+list above - four of five now checked against the real card set, see that
+entry for the full source citations; summarized here):
+1. [x] **`BS`/`CR` Long range labels** - not a data gap. Battlestation has
+   no Long-specific line (immune only at Short, 3 dmg any other range if
+   destroyed); Cruiser's printed card says "No effect" at Long explicitly.
+   Both already match `wolf_ship_definitions.gd` exactly.
+2. **Gorgoneion/Vulcan footer rules** - the abilities/numbers are now
+   known (Force Field Projector: flat -2 to one chosen ship, chosen
+   pre-Targeting, if charged; Missile Array: 3d6 per range phase, 1 dmg
+   per 6+/5+/4+, capped 1/target/phase; Laser Cannon: 2d6 at
+   Medium+Short only, 1 dmg per 4+, if charged) - none implemented in
+   `core/` yet. Still open: footer visibility (always-shown vs.
+   only-when-charged) - a UI convention the source never states.
+3. [~] **Signature colors** - the 6 core ships are answered by
+   `ship_colors.md` (repo root; see the v2 §9 entry above for the hex
+   values, the identity-not-status rules, and the `wolf_attack_tokens.gd`
+   reconciliation note). Endeavour, Maliades, Pallas, and Voyage 33-0 -
+   the four this item was actually about - are still unanswered; that
+   file only covers the 6 capital ships.
+4. [x] **Whether small ships appear on the targeting table - no.**
+   Confirmed from the actual printed Targeting Table on every team's Rules
+   Reference card (not just inferred): 1d6 → one of the 6 core ships,
+   nothing else. `n_lanes` is always exactly 6.
+5. [x] **Can a single wolf ship split its attack across two targets? No.**
+   Checked against the real printed Wolf Ship cards (`DoWNE - A4 Double
+   Sided v1.0 (1).pdf`, found at `C:\Users\lukas\Desktop\downe` - the
+   Facilitator's Guide PDF itself only lists "Wolf Ship cards" as a
+   battle-table component, it doesn't print their text). All 6 Wolf hull
+   types (Battlestation, Fleet Strikecarrier, Fighter Wing, Cruiser,
+   Destroyer, Assault Transport) print exactly one "Target" box and one
+   "Damage Taken" box per card, and every damage line reads "damage to
+   **target**" (singular) - including the Strikecarrier's "if not
+   destroyed" clause, which buffs *other* Fighter Wings' damage by +1
+   rather than redirecting its own. The AEGIS Admiral's briefing sheet's
+   Targeting Table (1d6 → one of the 6 ships) also assigns exactly one
+   target per roll. The one-wolf-one-lane partition v3 depends on is
+   confirmed sound - safe to lock the design on this point.
 
 **Acceptance checklist** (spec §13) is the real verification target once
 built - synthetic rosters at 3/8/15/24/30 wolves, 4 and 10 lanes, and a
