@@ -879,102 +879,105 @@ ships to dock at) and is now satisfied.
       shuttle actually got fuelled and exactly 1 fuel was spent) and
       that the checklist display updated correctly at every step.
 
-## Next up — Wolf Attack TV display: visual redesign to match a reference mockup
+## Done — Wolf Attack TV display v1 redesign
 
-The user added `Wolf_Ships-selection.png` (repo root) as a target design for
-the `MEDIUM` range-phase screen of `ui/tv/wolf_attack_display.gd`/`.tscn`.
-This is the piece that was explicitly *not* built to spec earlier this
-session (see the "Wolf Attack system" entry above: "Scope, agreed up front" -
-plain Controls, no custom flow container, no staged animations, basic
-color-coding). The reference image is what "done properly" looks like for
-this screen. **Read the image directly before starting** (`Read` on
-`Wolf_Ships-selection.png` renders it) - the description below is a guide
-for planning, not a substitute for looking at it.
+First pass at matching `Wolf_Ships-selection.png`, built per the plan in the
+previous version of this section. Landed: `ui/tv/ship_icon.gd` (hand-drawn
+vector icons for the 6 Wolf classes + 6 fleet ships), `ui/tv/wolf_display_palette.gd`
+(ship-identity colors matched to the reference image), `ui/tv/targeting_lines.gd`
+(dashed curved lines from wolf tokens to their target's fleet card), a rewritten
+`wolf_attack_display.tscn`/`.gd` STANDING layout with a pursuit bar, phase
+breadcrumb, redesigned wolf tokens (icon + class-specific effect label) and
+fleet cards (colored index numbers, SEC/DMG readout, class-code + "N BP" tag
+chips), and a "CANNOT BE TARGETED" strip. Structurally verified against a
+live driving script (pursuit bar fill, breadcrumb highlight, icon/effect-label
+content, fleet card index/tags, targeting-line link count all asserted); one
+real bug found and fixed this way - the "N BP" boarding-party tag read
+`fleet_ship["boarders_inbound"]`, which `WolfAttackView` only populates once
+the attack reaches `Phase.BOARDING`, but the fleet card is only ever shown
+during targeting/range phases, so the tag was always empty. Fixed by deriving
+a *projected* boarder count from each targeting wolf ship's own `boarders`
+field instead (same data the wolf token's "PREVENTS N BP" label already uses).
+Full test suite still green (37 files), no `core/` changes needed.
 
-**What the reference shows, top to bottom** (this is the STANDING layout -
-the current code's shared layout for targeting + all three range phases):
+User feedback after looking at it running: "a little bit better, but there is
+still a lot of work to do" - not close enough to the reference yet. Explicitly
+**not pixel-matched** going in (see the file-header comment on both new
+scripts) since this environment can't screenshot a live Godot window - visual
+QA has to come from the user actually looking at it, which is what happened
+here and is why there's a v2 pass below.
 
-- **Header row**: "WOLF ATTACK" (large title, top-left) + "TURN 3" (top-right).
-- **Force summary row**: "FORCE 10 + PURSUIT 6 = 16 CAP · 16 COMMITTED" on the
-  left - note this is a *new* number the current view doesn't compute:
-  total capacity appears to be base force (10) *plus the current pursuit
-  value* (6), which lines up with `open_questions_answered.md` §3.2's Wolf
-  Commander formula ("10 damage capacity + the current Pursuit Track
-  value") - worth checking whether this label is meant to explain *how the
-  attack's size was decided*, not just restate `WolfAttack`'s actual
-  composition. On the right: a **pursuit bar** - a segmented/colored bar
-  (yellow filled segments, then blue, then a red segment at the end) showing
-  `6 / 10`. `WolfAttackView` already exposes `pursuit`; this needs a new
-  rendered bar, not just a number.
-- **Phase breadcrumb**: "• TARGETING — • LONG — ⦿ MEDIUM — • SHORT — •
-  BOARDING — • RESOLVE" - a horizontal dotted track, current phase shown
-  filled/bright. Replaces the current plain `_phase_tracker` label text.
-- **Wolf ship row**: one icon per *class present in the attack* (not one per
-  ship - the reference shows exactly one Battlestation icon, one
-  Strikecarrier icon, etc., even though a real attack might have multiple
-  Cruisers). Each icon is a distinct hand-drawn vector silhouette per class
-  (Battlestation, Strikecarrier, Cruiser, Assault Transport, Destroyer, a
-  cluster of small arrows for Fighter Wing) - **not** built yet anywhere in
-  this project; would need new vector art or icon assets, ideally as
-  reusable Godot resources (`.svg` or hand-drawn `Polygon2D`/`Line2D`, kept
-  themeable per `wolf_attack_tv_display.md`'s original palette table).
-  Below each icon: class code (BS/SC/CR/AT/DE/FW), damage pips (already
-  have this data - `wolf_ship["damage_taken"]`/`["capacity"]`), a `↻` for
-  `returns_if_survives`, and a red/orange effect label - "SIEGE BATTERY"
-  and "PREVENTS N" are new copy, not just the raw `prevents` number; "STOPS
-  FW BUFF" is the Strikecarrier's effect described in words instead of a
-  number; "PREVENTS 4 BP" is the Assault Transport's boarder count phrased
-  as a prevents-style line rather than the current separate `boarders`
-  field's plain number. Below that: "→ AEGIS" style target labels.
-- **Dashed curved lines** from each wolf ship down to its target's fleet
-  card - this is the "line draws from the token to that ship's card"
-  animation from the *original* `wolf_attack_tv_display.md` spec (§5.2) that
-  got cut this session along with the rest of the staged-reveal animation
-  work. The reference shows it as a static (or at-rest) curved dashed line,
-  which is much cheaper to build than the full animated reveal sequence -
-  worth doing even without the animation, since it's what makes "which wolf
-  targets which ship" legible at a glance.
-- **Fleet ship row**: 6 cards, each with a large colored index number (1-6,
-  matching targeting-table order and each ship's identity color from
-  `wolf_attack_tv_display.md`'s original palette table), a ship silhouette
-  icon (new art, same as the Wolf ship icons), "SEC N" (this is
-  `security_teams` - already in the view data, confirmed by cross-checking
-  the shown values against `resources.md`'s starting security team counts:
-  AEGIS 9, Dione/Icebreaker/Quellon/Shepherd 2, Refinery 124 6 - all match),
-  "◄ N DMG" (already have this as `incoming_damage`), small tags showing
-  which wolf-ship classes are firing on it (new - not currently surfaced
-  per-fleet-card), and a highlighted red "N BP" tag when boarders are
-  inbound (already have `boarders_inbound`, just needs this treatment
-  instead of a separate boarding-only card).
-- **"TARGETING WRAPS · 7→1 · 0→6"** - a small static reference reminder of
-  the wrap rule, cheap to add, no new data needed.
-- **Bottom strip, "CANNOT BE TARGETED"**: small icons for FW Alpha, FW
-  Bravo, PDF Escort, Gorgoneion ("SHIELD → 2"), Vulcan ("LASER") - this is
-  the fleet's *own* combat craft/consoles, shown as a reference strip
-  separate from the wolf ships and fleet cards above. FW Alpha/Bravo/PDF
-  Escort map to `live_fleet_weapons` (already have this). Gorgoneion and
-  Vulcan do **not** - they're Small Ship consoles, and Small Ships aren't
-  modeled as objects in `core/` yet (same gap noted throughout this file).
-  This row can't be fully built until that exists; FW Alpha/Bravo/PDF
-  Escort alone could still ship as a partial version of this strip.
+## Next up — Wolf Attack TV display v2: close the gap spec
 
-**Suggested order of attack for whoever picks this up:**
-1. Vector ship icons per class (Wolf classes + fleet ship silhouettes) -
-   the single biggest visual gap, and everything else depends on having
-   *something* to draw in these slots.
-2. Pursuit bar + phase breadcrumb (self-contained, no new `core/` data).
-3. Targeting lines from wolf tokens to fleet cards (needs each token and
-   each card to have a stable screen position to draw between - the
-   current `HFlowContainer`-based wolf grid may need to change to
-   something with predictable positions, or the lines need to be computed
-   from each node's actual runtime `global_position` after layout).
-4. Fleet card redesign (index numbers + ship colors + per-class tags +
-   "N BP" merged in).
-5. "TARGETING WRAPS" note and the "CANNOT BE TARGETED" strip (both cheap,
-   do last).
+The user did a proper side-by-side pass against `Wolf_Ships-selection.png`
+and wrote it up as `wolf_attack_tv_display_v2_gap_spec.md` (repo root) -
+**read that file directly before starting**, it has exact pixel coordinates,
+hex colors, font sizes and a full priority-ordered checklist; this entry is
+just a pointer into it, not a substitute. It explicitly *supersedes v1's
+visual sections only* - `wolf_attack_tv_display.md`'s state machine, data
+contract and host input model still stand.
 
-None of this changes `core/combat/wolf_attack_view.gd`'s data contract in
-a way that's already covered - "FORCE 10 + PURSUIT 6 = 16 CAP" is the one
-new number that might need a new view field (or might just be computable
-client-side from `pursuit` + the wolf ships already in the view - worth
-deciding which before adding anything to `WolfAttackView`).
+**Headline diagnosis**: v1 got the information architecture right but reads
+as "an unstyled Godot window," not a battle map - no design tokens (colors/
+fonts/spacing are ad hoc per-node), flat grey background, wolf ships sit in
+bordered panels instead of floating free across the full width, no range-band
+gutter/arc, attack vectors are disconnected stubs, fleet cards are
+inconsistently styled, and there's leftover debug text (`LIVE: maliades`,
+`WOLF FORCE - N / N CAPACITY`) that shouldn't be on a screen 20 players are
+standing around.
+
+**Work top to bottom, per the spec's own §0 instruction** - §2 (design
+tokens: `wolf_attack_tokens.gd` + a bundled font pair with letter-spacing)
+must land before anything in §4, since every later fix references a token by
+name.
+
+- [ ] **P0 - structural** (nothing else matters until these land):
+      fixed 1920×1080 design space (`P0-01`); load the Chakra Petch/JetBrains
+      Mono font pair with tracking (`P0-02`); gradient + crimson bloom
+      backdrop instead of flat grey (`P0-03`); remove the wolf-ship panel
+      boxes and spread them across the full width (`P0-04`); build the
+      LONG/MEDIUM/SHORT range-band gutter + active arc (`P0-05`); replace
+      the disconnected vector stubs with dashed bezier curves landing on each
+      target card (`P0-06`); apply the §2.4 vertical rhythm table and kill
+      the dead space above the wraps line (`P0-07`); remove `LIVE: maliades`
+      and the redundant `WOLF FORCE - N / N CAPACITY` line from the TV output
+      entirely (`P0-08`).
+- [ ] **P1 - component fidelity**: fixed-height fleet cards with proper
+      backing/top-bar/targeted-glow states (`P1-09`); filled (not outline)
+      fleet ship icons (`P1-10`); larger colored card index numbers
+      (`P1-11`); `SEC N` moved above the card in the ship color (`P1-12`);
+      wolf pips as filled-remaining/hollow-damaged, hollow-first (`P1-13`);
+      distinct line-art silhouette per Wolf hull class (`P1-14`); pursuit
+      meter as amber-filled/navy-empty/crimson-doom-cell via one `_draw()`
+      (`P1-15`); phase rail size/weight/glow differential on the active item
+      (`P1-16`); header `TURN N` + cap-state-colored `COMMITTED` (`P1-17`);
+      outlined ship-type chips vs. filled `ALERT_DEEP` BP chips (`P1-18`);
+      footer short names + cyan triangles + modifier suffixes (`P1-19`);
+      wraps line in dim cyan with tracking (`P1-20`).
+- [ ] **P2 - polish**: fake glow on the active band arc/targeted
+      cards/active phase dot (`P2-21`); dash-offset travel animation on
+      attack vectors (`P2-22`); slow pulse on targeted card borders
+      (`P2-23`); phase-transition cross-fade (`P2-24`).
+
+**Data contract additions** (§5 of the spec) - `core/` stays presentation-free,
+these are new/extended keys on the existing flat snapshot dict, not new
+rules: `turn` (missing from the contract entirely - header needs it),
+per-wolf-ship `damage_taken` and `returns` (drives pip fill state and the
+inline `↻` glyph), and a generalized `untargetable` list (short_name/value/
+modifier triplets) so the footer can cover more than just fighter wings.
+`wolf_ability_label(hull, phase) -> String` is meant to be a small pure
+function in `core/` (derived from damage-if-destroyed-at-phase, not stored),
+which also makes it headlessly testable per the spec's §7 note.
+
+**Open items - do not guess, per CLAUDE.md** (spec §9, flagged rather than
+resolved by the spec author):
+1. `BS` and `CR` ability labels at **Long** range - not visible in either
+   reference image; verify against the Facilitator Guide before wiring.
+2. Gorgoneion shield value and Vulcan laser state derivation, and whether
+   they always appear in the footer or only when active.
+3. Signature colors for the small ships (Endeavour, Maliades, Pallas,
+   Voyage 33-0) - needed before they can appear on this screen at all.
+4. Whether small ships appear on the Wolf Attack targeting table at all
+   (already on the project's open-questions list) - determines whether
+   `FleetRow` needs to handle more than 6 cards. Build it N-capable
+   regardless, per the spec, but tune spacing for 6 until answered.

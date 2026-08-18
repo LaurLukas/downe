@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://ui/tv/wolf_attack_display.gd" id="1"]
+[ext_resource type="Script" path="res://ui/tv/targeting_lines.gd" id="2"]
 
 [node name="WolfAttackDisplay" type="Control"]
 anchor_right = 1.0
@@ -39,23 +40,66 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 size_flags_vertical = 3
 
-[node name="PhaseTracker" type="Label" parent="Root/StandingPanel"]
+[node name="HeaderRow" type="HBoxContainer" parent="Root/StandingPanel"]
+
+[node name="ForceSummaryLabel" type="Label" parent="Root/StandingPanel/HeaderRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="PursuitRow" type="HBoxContainer" parent="Root/StandingPanel/HeaderRow"]
+
+[node name="PursuitCaption" type="Label" parent="Root/StandingPanel/HeaderRow/PursuitRow"]
+text = "PURSUIT"
+
+[node name="PursuitBarContainer" type="HBoxContainer" parent="Root/StandingPanel/HeaderRow/PursuitRow"]
 unique_name_in_owner = true
 
-[node name="WolfCapacityLabel" type="Label" parent="Root/StandingPanel"]
+[node name="PursuitValueLabel" type="Label" parent="Root/StandingPanel/HeaderRow/PursuitRow"]
 unique_name_in_owner = true
 
-[node name="WolfGrid" type="HFlowContainer" parent="Root/StandingPanel"]
+[node name="PhaseBreadcrumb" type="HBoxContainer" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 
-[node name="FleetRow" type="HBoxContainer" parent="Root/StandingPanel"]
+[node name="BattleArea" type="Control" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 size_flags_vertical = 3
+
+[node name="BattleLayout" type="VBoxContainer" parent="Root/StandingPanel/BattleArea"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="WolfCapacityLabel" type="Label" parent="Root/StandingPanel/BattleArea/BattleLayout"]
+unique_name_in_owner = true
+
+[node name="WolfGrid" type="HFlowContainer" parent="Root/StandingPanel/BattleArea/BattleLayout"]
+unique_name_in_owner = true
+
+[node name="FleetRow" type="HBoxContainer" parent="Root/StandingPanel/BattleArea/BattleLayout"]
+unique_name_in_owner = true
+size_flags_vertical = 3
+
+[node name="TargetingLinesOverlay" type="Control" parent="Root/StandingPanel/BattleArea"]
+unique_name_in_owner = true
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("2")
+
+[node name="TargetingWrapsLabel" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+text = "TARGETING WRAPS · 7 → 1 · 0 → 6"
+horizontal_alignment = 1
 
 [node name="PhaseBanner" type="Label" parent="Root/StandingPanel"]
 unique_name_in_owner = true
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="CannotBeTargetedLabel" type="Label" parent="Root/StandingPanel"]
+unique_name_in_owner = true
+text = "CANNOT BE TARGETED"
+
+[node name="CannotBeTargetedRow" type="HBoxContainer" parent="Root/StandingPanel"]
+unique_name_in_owner = true
 
 [node name="BoardingPanel" type="VBoxContainer" parent="Root"]
 unique_name_in_owner = true
