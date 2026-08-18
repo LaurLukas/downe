@@ -19,6 +19,10 @@ enum Class {
 
 var id: String = ""
 var display_name: String = ""
+## Short form for space-constrained displays (the Wolf Attack TV footer's
+## "CANNOT BE TARGETED" strip - see wolf_attack_tv_display_v2_gap_spec.md
+## §4.9). Defaults to display_name for craft that never need shortening.
+var short_name: String = ""
 var craft_class: Class = Class.ENGINEERING_SHUTTLE
 var home_ship: String = ""
 var operator_role: String = ""
@@ -38,6 +42,7 @@ static func from_dict(data: Dictionary) -> CraftDefinition:
 	var definition := CraftDefinition.new()
 	definition.id = data["id"]
 	definition.display_name = data["display_name"]
+	definition.short_name = data.get("short_name", definition.display_name)
 	definition.craft_class = data["class"]
 	definition.home_ship = data["home_ship"]
 	definition.operator_role = data["operator_role"]

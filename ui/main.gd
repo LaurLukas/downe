@@ -70,6 +70,16 @@ func _ready() -> void:
 	# Deployment item.
 	tv_window.size = Vector2i(1280, 720)
 	tv_window.position = Vector2i(80, 80)
+	# WolfAttackDisplay's STANDING layout is authored against a fixed
+	# 1920x1080 design space (wolf_attack_tv_display_v2_gap_spec.md §2.1)
+	# - every position inside it is a literal design-space pixel value,
+	# not computed from get_viewport_rect(). content_scale makes this
+	# Window report that fixed canvas to its children regardless of the
+	# real OS window size (still freely resizable, per the window-border
+	# fix above - KEEP_ASPECT letterboxes rather than distorting).
+	tv_window.content_scale_size = Vector2i(1920, 1080)
+	tv_window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	tv_window.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
 	var tv_display := preload("res://ui/tv/tv_display.tscn").instantiate()
 	tv_window.add_child(tv_display)
 	var wolf_attack_display := preload("res://ui/tv/wolf_attack_display.tscn").instantiate()

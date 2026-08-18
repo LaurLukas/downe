@@ -931,29 +931,72 @@ tokens: `wolf_attack_tokens.gd` + a bundled font pair with letter-spacing)
 must land before anything in §4, since every later fix references a token by
 name.
 
-- [ ] **P0 - structural** (nothing else matters until these land):
-      fixed 1920×1080 design space (`P0-01`); load the Chakra Petch/JetBrains
-      Mono font pair with tracking (`P0-02`); gradient + crimson bloom
-      backdrop instead of flat grey (`P0-03`); remove the wolf-ship panel
-      boxes and spread them across the full width (`P0-04`); build the
-      LONG/MEDIUM/SHORT range-band gutter + active arc (`P0-05`); replace
-      the disconnected vector stubs with dashed bezier curves landing on each
-      target card (`P0-06`); apply the §2.4 vertical rhythm table and kill
-      the dead space above the wraps line (`P0-07`); remove `LIVE: maliades`
-      and the redundant `WOLF FORCE - N / N CAPACITY` line from the TV output
-      entirely (`P0-08`).
-- [ ] **P1 - component fidelity**: fixed-height fleet cards with proper
-      backing/top-bar/targeted-glow states (`P1-09`); filled (not outline)
-      fleet ship icons (`P1-10`); larger colored card index numbers
-      (`P1-11`); `SEC N` moved above the card in the ship color (`P1-12`);
-      wolf pips as filled-remaining/hollow-damaged, hollow-first (`P1-13`);
-      distinct line-art silhouette per Wolf hull class (`P1-14`); pursuit
-      meter as amber-filled/navy-empty/crimson-doom-cell via one `_draw()`
-      (`P1-15`); phase rail size/weight/glow differential on the active item
-      (`P1-16`); header `TURN N` + cap-state-colored `COMMITTED` (`P1-17`);
-      outlined ship-type chips vs. filled `ALERT_DEEP` BP chips (`P1-18`);
-      footer short names + cyan triangles + modifier suffixes (`P1-19`);
-      wraps line in dim cyan with tracking (`P1-20`).
+- [x] **P0 - structural** - all 8 landed. `res://ui/tv/wolf_attack_tokens.gd`
+      holds every color/font-scale/vertical-rhythm constant (§2); the STANDING
+      layout is a fixed 1920×1080 canvas via `tv_window.content_scale_*` in
+      `ui/main.gd` (`P0-01`); Chakra Petch (DISPLAY) + JetBrains Mono (DATA,
+      variable font, weight selected via the `wght` axis) are bundled under
+      `res://assets/fonts/` and applied with `FontVariation.spacing_glyph`
+      tracking per token, no CDN/runtime download (`P0-02`); `wolf_backdrop.gd`
+      draws the near-black gradient + crimson top-corner bloom, built at
+      runtime from `GradientTexture2D` resources rather than baked PNGs -
+      this project has no image editor in its toolchain, and Godot's own
+      procedural gradients give the same "cheap, computed-once, no shader"
+      result the spec was after without needing external raster assets
+      (`P0-03`); the wolf force row is a bare `HBoxContainer` (no
+      `PanelContainer`/border) spanning the full safe-margin width, each
+      item `SIZE_EXPAND_FILL` (`P0-04`); `range_bands.gd` draws the
+      LONG/MEDIUM/SHORT gutter labels and the active-band arc, hidden
+      outside range phases (`P0-05`); `targeting_lines.gd` now draws a
+      proper cubic-bezier dashed curve per spec §4.7's control-point math,
+      fixed vector origin/terminus y-values instead of node-edge-derived
+      ones (`P0-06`); every STANDING element sits at its §2.4 y-coordinate
+      via the `.tscn`'s explicit offsets (`P0-07`); the `LIVE: <weapon>` and
+      `WOLF FORCE - N / N CAPACITY` debug lines are gone from the TV output
+      entirely, not moved anywhere else yet - see below (`P0-08`).
+
+      Touching the wolf-item and fleet-card builders for `P0-04` made most
+      of **P1** cheap to land in the same pass, so it did:
+      fixed-height fleet cards with `CARD_BG`/`CARD_BG_TARGETED` backing, a
+      top color bar, and an `ALERT` border+shadow when targeted (`P1-09`);
+      larger colored index numbers (`P1-11`); `SEC N` above the card in the
+      ship color (`P1-12`); wolf pips as filled-remaining/hollow-damage-taken,
+      hollow first, via the new `wolf_code_pips.gd` (`P1-13`); the pursuit
+      meter as one `_draw()` call in `pursuit_meter.gd`, amber-filled/
+      navy-empty/crimson-doom-cell (`P1-15`); phase rail active item is
+      larger/bold/cyan with fixed per-item widths so the row doesn't reflow
+      (`P1-16`, minus the glow - that's `P2-21`); header `TURN N` +
+      cap-state-colored `COMMITTED`, built as one `RichTextLabel` with BBCode
+      per the spec's own suggestion (`P1-17`); outlined ship-type chips vs.
+      filled `ALERT_DEEP` BP chips via a shared `_make_chip()` helper
+      (`P1-18`); footer short names (new `CraftDefinition.short_name` field,
+      `core/craft/craft_definitions.gd`) + cyan triangles (`P1-19`, minus
+      Gorgoneion/Vulcan - still blocked on Small Ships not being `core/`
+      objects); wraps line in `CYAN_DIM` with tracking (`P1-20`).
+
+      Verified structurally against a live driving script each time (content
+      scale, title hand-off between the shared and STANDING-owned titles,
+      stat line/pursuit meter/breadcrumb text and state, range-bands
+      visibility toggling on/off with phase, wolf item/pips/fleet-card
+      structure and coloring, targeting-line link count, footer entry
+      count, and the P0-08 debug-text removal) - one round-trip bug in the
+      test script itself (a wrong child index), not the app. Full test
+      suite still green (37 files) - no `core/` changes beyond the new
+      `short_name` field, which is plain display-string data, same
+      category as `display_name` already living there.
+
+      **Deliberately not done in this pass** (left for a follow-up, not
+      forgotten): `P1-10`/`P1-14` (filled solid-silhouette icons authored
+      as `.svg` assets) - kept the existing `ship_icon.gd` hand-drawn
+      stroke-outline `_draw()` icons from the v1 pass instead, since they
+      already give a distinct shape per hull/ship and authoring real SVG art
+      isn't more tractable here than the code that's already working; **all
+      of P2** (`P2-21`..`P2-24`: glow, dash-offset animation, pulse,
+      cross-fade) - explicitly the polish tier, ordered last in the spec's
+      own priority list; the P0-08 "route it through the host console
+      instead" follow-up for the removed debug lines - not built, just
+      removed, since that's a new host-console feature, not a TV-side fix.
+- [ ] **P1 remaining**: `P1-10`/`P1-14` (see above).
 - [ ] **P2 - polish**: fake glow on the active band arc/targeted
       cards/active phase dot (`P2-21`); dash-offset travel animation on
       attack vectors (`P2-22`); slow pulse on targeted card borders

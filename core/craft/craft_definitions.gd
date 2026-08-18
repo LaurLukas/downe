@@ -139,6 +139,7 @@ const _RAW_ROSTER: Array[Dictionary] = [
 	# --- Fighter wings ---
 	{
 		"id": "fighter_wing_alpha", "display_name": "I.C.S.S. Fighter Wing Alpha",
+		"short_name": "FW ALPHA",
 		"class": CraftDefinition.Class.FIGHTER_WING,
 		"home_ship": "aegis", "operator_role": "aegis_wing_commander",
 		"cargo_types": [],
@@ -147,6 +148,7 @@ const _RAW_ROSTER: Array[Dictionary] = [
 	},
 	{
 		"id": "fighter_wing_bravo", "display_name": "I.C.S.S. Fighter Wing Bravo",
+		"short_name": "FW BRAVO",
 		"class": CraftDefinition.Class.FIGHTER_WING,
 		"home_ship": "aegis", "operator_role": "aegis_wing_commander",
 		"cargo_types": [],
@@ -155,6 +157,7 @@ const _RAW_ROSTER: Array[Dictionary] = [
 	},
 	{
 		"id": "pdf_escort_wing", "display_name": "P.D.F. Escort Fighter Wing",
+		"short_name": "PDF ESCORT",
 		"class": CraftDefinition.Class.FIGHTER_WING,
 		"home_ship": "refinery_124", "operator_role": "refinery_124_pdf_commander",
 		"cargo_types": [],

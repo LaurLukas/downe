@@ -1,18 +1,20 @@
 class_name TargetingLines
 extends Control
 
-## Draws a dashed curved line from each Wolf token down to its target's
-## fleet card, matching Wolf_Ships-selection.png. Sits above WolfGrid
-## and FleetRow (same parent, added after them, plus mouse_filter
-## IGNORE so it never blocks anything on a read-only screen) and reads
-## their children's actual laid-out positions each frame - Godot only
-## finalizes container layout after a process frame, and this screen's
-## content rebuilds every GameState.mutated, so redrawing once
-## immediately after rebuilding would often draw against stale
-## positions. Redrawing every frame is simpler than chasing that
-## timing exactly, and cheap for a handful of line segments.
+## Draws a dashed red bezier curve from each wolf ship down to the top
+## edge of its target's fleet card, per
+## wolf_attack_tv_display_v2_gap_spec.md §4.7 (P0-06). Sits above
+## RangeBands and below FleetRow in draw order (same parent, added after
+## bands, before cards visually overlap it) and reads each linked node's
+## actual laid-out x-position every frame, since this screen's content
+## rebuilds on every GameState.mutated and Godot only finalizes container
+## layout after a process frame - redrawing once immediately after a
+## rebuild would often draw against stale positions. Redrawing every
+## frame is simpler than chasing that timing exactly, and cheap for a
+## handful of curves. mouse_filter IGNORE since this is a read-only
+## overlay with nothing underneath it to block.
 
-var links: Array[Dictionary] = []  # [{"from": Control, "to": Control, "color": Color}]
+var links: Array[Dictionary] = []  # [{"from": Control, "to": Control}]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -26,38 +28,46 @@ func set_links(new_links: Array[Dictionary]) -> void:
 	queue_redraw()
 
 func _draw() -> void:
+	var impact_points: Array[Vector2] = []
 	for link: Dictionary in links:
 		var from: Control = link["from"]
 		var to: Control = link["to"]
 		if not is_instance_valid(from) or not is_instance_valid(to):
 			continue
-		var start := _to_local(from.get_global_rect().get_center() + Vector2(0, from.size.y * 0.5))
-		var end := _to_local(to.get_global_rect().get_center() - Vector2(0, to.size.y * 0.5))
-		_draw_dashed_curve(start, end, link.get("color", WolfDisplayPalette.WOLF_RED))
+		var origin := _to_local(Vector2(from.get_global_rect().get_center().x, WolfAttackTokens.Y_VECTOR_ORIGIN))
+		var terminus := _to_local(Vector2(to.get_global_rect().get_center().x, WolfAttackTokens.Y_FLEET_CARD_TOP))
+		_draw_dashed_bezier(origin, terminus)
+		if not impact_points.has(terminus):
+			impact_points.append(terminus)
+	for point in impact_points:
+		draw_circle(point, 4.0, WolfAttackTokens.ALERT)
 
 func _to_local(global_point: Vector2) -> Vector2:
 	return global_point - get_global_rect().position
 
-## Quadratic bezier sagging downward between the two points, drawn as
-## short dashes rather than a solid line.
-func _draw_dashed_curve(from: Vector2, to: Vector2, color: Color) -> void:
-	var control := Vector2((from.x + to.x) * 0.5, maxf(from.y, to.y) + 40.0)
-	var segments := 40
+## Cubic bezier with vertically-pulled control points (§4.7's "S-curve
+## that fans outward near the top and converges at the card"), drawn as
+## alternating dash/gap segments instead of a solid line.
+func _draw_dashed_bezier(origin: Vector2, terminus: Vector2) -> void:
+	var c1 := origin + Vector2(0.0, 60.0)
+	var c2 := terminus - Vector2(0.0, 70.0)
+	var segments := 48
 	var points: Array[Vector2] = []
 	for i in range(segments + 1):
 		var t := float(i) / segments
-		var point := from.lerp(control, t).lerp(control.lerp(to, t), t)
-		points.append(point)
+		points.append(origin.bezier_interpolate(c1, c2, terminus, t))
 
+	var color := Color(WolfAttackTokens.ALERT, 0.75)
+	const DASH_LENGTH := 10.0
+	const GAP_LENGTH := 8.0
+	var distance_since_toggle := 0.0
 	var dash_on := true
-	var since_toggle := 0
-	const DASH_LENGTH := 3
 	for i in range(points.size() - 1):
+		var segment_length := points[i].distance_to(points[i + 1])
 		if dash_on:
-			draw_line(points[i], points[i + 1], color, 2.0)
-		since_toggle += 1
-		if since_toggle >= DASH_LENGTH:
-			since_toggle = 0
+			draw_line(points[i], points[i + 1], color, 1.5)
+		distance_since_toggle += segment_length
+		var threshold := DASH_LENGTH if dash_on else GAP_LENGTH
+		if distance_since_toggle >= threshold:
+			distance_since_toggle = 0.0
 			dash_on = not dash_on
-
-	draw_circle(to, 4.0, color)
