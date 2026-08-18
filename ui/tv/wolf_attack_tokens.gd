@@ -99,6 +99,12 @@ const TYPE_SCALE: Dictionary[String, Dictionary] = {
 	"T_PHASE_ACTIVE": {"family": Family.DISPLAY, "size": 30, "bold": true, "spacing": 4.0},
 	"T_WOLF_CODE": {"family": Family.DISPLAY, "size": 34, "bold": true, "spacing": 3.0},
 	"T_WOLF_ABILITY": {"family": Family.DISPLAY, "size": 19, "bold": true, "spacing": 2.0},
+	# Damage ladder redesign (docs/wolf_attack_damage_ladder.md), replacing
+	# T_WOLF_ABILITY's single PREVENTS-N line with a 4-cell ladder + badges.
+	"T_LADDER_HEADER": {"family": Family.DATA, "size": 13, "bold": false, "spacing": 2.0},
+	"T_LADDER_CELL": {"family": Family.DATA, "size": 22, "bold": true, "spacing": 1.0},
+	"T_LADDER_CELL_COMPACT": {"family": Family.DATA, "size": 16, "bold": true, "spacing": 1.0},
+	"T_BADGE": {"family": Family.DATA, "size": 15, "bold": true, "spacing": 1.0},
 	"T_WOLF_TARGET": {"family": Family.DATA, "size": 17, "bold": false, "spacing": 2.0},
 	"T_BAND_GUTTER": {"family": Family.DISPLAY, "size": 28, "bold": false, "spacing": 6.0},
 	"T_BAND_ACTIVE": {"family": Family.DISPLAY, "size": 26, "bold": true, "spacing": 5.0},

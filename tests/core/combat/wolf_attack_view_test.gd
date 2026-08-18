@@ -76,17 +76,6 @@ func test_to_dict_persistence_keeps_the_raw_target_die() -> void:
 
 	assert_eq(saved["wolf_attack"]["wolf_ships"][ship.id]["target_die"], ship.target_die, "the save file should keep the true pre-rolled target die")
 
-func test_battlestation_shows_zero_prevents_at_long() -> void:
-	var state := _build_state()
-	var attack := state.start_wolf_attack()
-	var ship := attack.add_wolf_ship(WolfShipDefinitions.Class.BATTLESTATION, state.rng)
-	attack.advance_phase()  # TARGETING
-	attack.advance_phase()  # RANGE_LONG
-
-	var view := WolfAttackView.build(state)
-	var entry := _find_wolf_ship(view, ship.id)
-	assert_eq(entry["prevents"], 0, "a Battlestation's prevents should be 0 at Long Range")
-
 func test_battlestation_shows_immune_at_short() -> void:
 	var state := _build_state()
 	var attack := state.start_wolf_attack()
@@ -96,30 +85,31 @@ func test_battlestation_shows_immune_at_short() -> void:
 	var view := WolfAttackView.build(state)
 	var entry := _find_wolf_ship(view, ship.id)
 	assert_true(entry["immune_this_phase"], "a Battlestation should be flagged immune at Short Range")
-	assert_eq(entry["prevents"], null, "prevents should be null (not shown) while immune")
 
-func test_assault_transport_shows_boarders_instead_of_prevents() -> void:
+func test_destroyed_at_phase_defaults_to_minus_one_while_alive() -> void:
 	var state := _build_state()
 	var attack := state.start_wolf_attack()
-	var ship := attack.add_wolf_ship(WolfShipDefinitions.Class.ASSAULT_TRANSPORT, state.rng)
+	var ship := attack.add_wolf_ship(WolfShipDefinitions.Class.CRUISER, state.rng)
 	attack.phase = WolfAttack.Phase.RANGE_MEDIUM
 
 	var view := WolfAttackView.build(state)
 	var entry := _find_wolf_ship(view, ship.id)
-	assert_eq(entry["prevents"], null, "Assault Transports don't have a prevents number")
-	assert_eq(entry["boarders"], 4, "Assault Transports should show their projected boarding parties instead")
+	assert_eq(entry["destroyed_at_phase"], -1, "a wolf still alive has no destroyed_at_phase yet")
 
-func test_strikecarrier_prevents_is_live_fighter_wing_count() -> void:
+func test_destroyed_at_phase_records_which_range_phase_killed_it() -> void:
+	# Feeds the damage ladder's "realised cell" display
+	# (docs/wolf_attack_damage_ladder.md §6) - the view has to expose
+	# which phase a wolf actually died in, not just that it's destroyed.
 	var state := _build_state()
 	var attack := state.start_wolf_attack()
-	var strikecarrier := attack.add_wolf_ship(WolfShipDefinitions.Class.STRIKECARRIER, state.rng)
-	attack.add_wolf_ship(WolfShipDefinitions.Class.FIGHTER_WING, state.rng)
-	attack.add_wolf_ship(WolfShipDefinitions.Class.FIGHTER_WING, state.rng)
+	var ship := attack.add_wolf_ship(WolfShipDefinitions.Class.CRUISER, state.rng)
 	attack.phase = WolfAttack.Phase.RANGE_MEDIUM
+	attack.add_damage(ship.id, ship.capacity())
 
 	var view := WolfAttackView.build(state)
-	var entry := _find_wolf_ship(view, strikecarrier.id)
-	assert_eq(entry["prevents"], 2, "a Strikecarrier's prevents should equal the current live fighter wing count")
+	var entry := _find_wolf_ship(view, ship.id)
+	assert_true(entry["destroyed"], "sanity check: the ship should be destroyed")
+	assert_eq(entry["destroyed_at_phase"], WolfShipDefinitions.RangePhase.MEDIUM, "destroyed_at_phase should record the range phase it died in")
 
 func test_fleet_ships_cover_all_six_core_ships() -> void:
 	var state := _build_state()

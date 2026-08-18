@@ -1537,7 +1537,222 @@ changes re-derive every ability label with no state push, and a host
 reassigning a target from the admin console actually moves the token to
 its new lane rather than the lane layout being a read-only derivation.
 
-## Next up — Wolf Attack TV display: damage ladder (replaces `PREVENTS N`)
+## Done (structural pass; STANDING phases only) — Wolf Attack TV display: damage ladder
+
+**Landed**: the 4-cell Long/Medium/Short/Survives ladder replacing
+`PREVENTS N` on every wolf token, the `↻`/`4BP`/`+N`/`⊘S` badges, and the
+lane incoming line's floor/ceiling range + bar replacing v3's single
+projection - across all four tiers (A headed/A2 headerless full-art,
+B/C/D compact degraded forms) and the new Tier A/A2 boundary (`≤2`
+headed 118px, exactly `3` headerless 100px, per the user's confirmed
+call to follow the handoff README's deviation rather than the spec's
+literal §4).
+
+**New/changed files**: `core/wolf_damage.gd` (`WolfDamage`, pure,
+re-derived from `wolf_ship_definitions.gd`'s already-verified
+constants - `tests/core/wolf_damage_test.gd`, 5 tests) provides
+`ladder()`/`damage_if_destroyed_now()`/`damage_if_survives()`.
+`wolf_lane_layout.gd` gained `lane_ceiling()`/`lane_floor()` (replacing
+`incoming_damage_for_lane()`), `live_strikecarrier_count()`, the four
+`badge_*()` queries, and `ladder_cell_values()`/`ladder_cell_states()`
+(the latter returns a `CellState` enum, not a `Color` - colour mapping
+stays in `wolf_attack_display.gd` so this file keeps its established
+zero-visual-dependency rule). `ability_label_full()`/`ability_abbrev()`
+are gone entirely, along with the "prevents"/per-wolf "boarders" fields
+`WolfAttackView` used to compute for them (dead once nothing read them -
+confirmed via grep before removing); `WolfAttackView` gained
+`destroyed_at_phase` instead, which the ladder needs to show a destroyed
+wolf's actually-realised cell.
+
+**A real ambiguity in the spec's own wording, resolved against primary
+sources rather than guessed** (documented at length in
+`core/wolf_damage.gd`'s file header): §8 says `damage_if_survives` "takes
+live_fw_count because the Strikecarrier's contribution is 2 +
+live_fw_count", which read literally would put the Fighter-Wing buff on
+the *Strikecarrier's own* ceiling. That contradicts both the real printed
+Strikecarrier card ("If not destroyed: 2 damage to target, **plus any
+Wolf Fighter Wings that have not been destroyed do +1 damage**" - the
+bonus is to *other* ships) and this project's own already-tested
+`WolfAttack.compute_damage_tally()`, which adds the bonus to each
+surviving Fighter Wing's own damage, never to the Strikecarrier's - and
+the spec's very next paragraph ("Get the double-count right") agrees
+with that reading. Followed the verified primary sources: a
+Strikecarrier's own ceiling is always flat 2; a Fighter Wing's own
+ceiling rises by `STRIKECARRIER_FIGHTER_BONUS` per live Strikecarrier
+*anywhere in the attack* (matching `compute_damage_tally()`'s attack-wide
+scope, not per-lane). Verified end-to-end against the real running
+scene: two Fighter Wings alongside one live Strikecarrier correctly show
+survives-cell `2` (not the static base `1`), and the Strikecarrier's own
+survives cell stayed flat `2` regardless.
+
+**A design gap the spec left unaddressed, filled with a documented
+judgment call**: what does an *already-destroyed* wolf's ladder show
+during a *later* live phase (not just at final Resolution, which the
+spec does cover)? Extended the "resolve" treatment (realised cell in
+CYAN, rest ghosted) to apply the moment any wolf is destroyed, regardless
+of which phase is current now - a Cruiser killed at Medium keeps showing
+its Medium cell highlighted through Short, rather than reverting to a
+plain live-view once the attack moves on. `WolfLaneLayout.CellState`
+(`PASSED`/`CURRENT`/`FUTURE`/`REALISED`/`GHOSTED`/`SURVIVES_LIVE`/
+`SURVIVES_GHOSTED`) encodes this as one pure, fully-tested state machine
+(`tests/ui/wolf_lane_layout_test.gd`'s `ladder_cell_states` tests).
+
+**Real bug caught by the driving script - the exact same class of bug as
+last time, in a new place**: `_ladder_row_height()`'s guessed
+boxed-cell-border overhead (a StyleBoxFlat 1px border + 2px content
+margin, estimated at a flat 4px) was 1px short of what the real
+`PanelContainer` actually needed, so every full-form token's ladder row
+overflowed its slot by exactly 1px the moment any cell got boxed (i.e.
+every range phase, never during targeting - explaining why the earlier,
+narrower structural check hadn't caught it). Found this time by a driving
+script purpose-built to catch it: it walks each token's real Control
+tree and compares `get_combined_minimum_size()` against the actual
+assigned slot size, rather than only counting tokens/lanes like the
+first driving script did. Fixed with a more generous empirically-verified
+margin constant rather than a live-measured sample node (the earlier
+fix's approach) - detached-Control minimum-size reliability off-tree
+felt like an unnecessary risk for a 1px cosmetic budget, where a few
+extra px of headroom costs nothing but a marginally shorter icon.
+
+**Verified three ways**: `tests/core/wolf_damage_test.gd` (5 tests) and
+the new additions to `tests/ui/wolf_lane_layout_test.gd` (39 test
+functions in that file now, up from the v3 rebuild's smaller baseline)
+cover every pure derivation directly. A geometry-focused driving script
+(deliberately not committed,
+same "throwaway diagnostic" pattern as before) walked the real Control
+tree across every tier (1/2/3/6/10/18 wolves) and all four STANDING
+phases plus a mid-attack kill, asserting no token's real measured content
+exceeds its assigned slot - this is what caught the 1px bug above. A
+second content-focused driving script dumped every rendered Label's text
+and colour for a 5-wolf mixed roster (Strikecarrier + 2 Fighter Wings +
+Assault Transport + Battlestation) at Medium range and hand-verified
+every number against the real card values: Battlestation `3·3·—·3`ᶜʸᵃⁿᵃᵗᵐᵉᵈ,
+Strikecarrier `2·2·2·2` plus a live `+2` badge (2 live Fighter Wings),
+Assault Transport `0·0·0·0` plus a `4BP` chip, both Fighter Wings showing
+a *boosted* survives cell (`2`, not the static base `1`, confirming the
+live-Strikecarrier bonus reached the right row), and the lane's own `▼9`
+ceiling matching a hand sum of all five ships' survives values exactly.
+39 test files total, all still green.
+
+**A fourth real bug, again from a screenshot** (`docs/wolf_attack_v4.png`,
+taken against the just-shipped ladder above): full-form tokens rendered
+with a tiny, dead-centred icon, and the `4BP`/`⊘S` badges appeared to
+render on top of the code/pips text instead of beside it ("Troop
+carriers have 4bp under them", "Battlestation has grey 2 letter under BS
+initials"). One root cause explained all three symptoms:
+`_build_full_token()` gave `WolfCodePips` `custom_minimum_size =
+Vector2(0, code_row_height)` - zero WIDTH, no expand flag - inside its
+`code_row` `HBoxContainer`, so it collapsed to nothing and every badge
+appended after it drew stacked on the same spot as the code text instead
+of laid out beside it. The tiny/centred icon was a separate, genuine
+design request (not a bug) - the old layout stacked icon-on-top-of-text,
+so the icon only ever got whatever vertical sliver was left after two
+text rows, and sat centred over mostly-empty lane width the text never
+used.
+
+Fixed both at once by redesigning `_build_full_token()` from a vertical
+stack to icon-left/text-right: a large `ShipIcon` sized off the full
+token height sits on the left, with code/pips + badges + the ladder row
+stacked in a column to its right - `code_pips.size_flags_horizontal =
+SIZE_EXPAND_FILL` now, matching what the compact-form token already did
+correctly the whole time. This also deleted `_ladder_row_height()`
+(no longer needed - the icon no longer shares vertical space with the
+text column, so there's nothing left to subtract measured row heights
+from).
+
+Verified with a throwaway driving script (same
+`get_combined_minimum_size()`-vs-assigned-slot pattern as the two
+earlier overflow bugs, extended to also check for horizontal overlap
+between successive `code_row` children) across every wolf class and
+badge combination - Assault Transport's `4BP`, Battlestation's `⊘S`,
+Strikecarrier's `+N`, plus a destroyed Tier A2 token - at both Tier A
+(118px, headed) and Tier A2 (100px, headerless): all six fit their slot
+with zero overlap. Full test suite still green (39 files).
+
+The `4BP` badge itself stays - it's an explicit spec-mandated rules-fact
+badge (§3.3), and mirrors v3's own established precedent of showing "N
+BP" in two places on purpose (per-token badge and the lane's aggregate
+incoming-line chip) rather than one - not an oversight to remove.
+
+**A fifth real bug, same feature, one more round of user testing**: the
+user asked what `⊘S` (Battlestation's "cannot be damaged at Short"
+badge) was for, whether it was needed, and reported it now overlapping
+the `↻` returns glyph drawn inside `WolfCodePips` itself. Root cause was
+one level deeper than the fourth bug's fix reached:
+`WolfCodePips._draw()` draws unclipped, starting from local x=0,
+regardless of whatever rect a parent container actually gives it - and
+`WolfCodePips` had no `_get_minimum_size()` override, so no container in
+the chain had any idea how wide its real content (code text + one arc
+per pip + the trailing `↻` glyph) actually was. For a Battlestation
+(capacity 6, the widest hull) the container guessed a narrower width
+than the ~180px the content actually needed, so the tail end - the last
+pips and the `↻` glyph - drew straight through the `⊘S` badge sitting to
+its right. Fixed at the source with a real `_get_minimum_size()`
+override on `WolfCodePips` (pure font-metric math, no tree dependency,
+so it's reliable even before the node is added anywhere) - containers
+now reserve the actual pixel width this control draws into, for any
+code/capacity/returns-icon combination.
+
+That fix alone surfaced a second, smaller problem: once the container
+correctly accounted for a full-capacity Battlestation's real content
+width (~180px) plus the `⊘S` badge (~29px more), the two together
+*still* didn't fit next to the now-large icon within one 273px-wide Tier
+A lane (icon 94px + separation + 209px of text > 273px available) - the
+badge wasn't overlapping anymore, it was being clipped off-canvas
+entirely by the token's own `clip_contents` holder, just as invisible as
+before but for a different reason. Given `⊘S` was already documented as
+redundant the moment it was added ("redundant with the ladder's own
+Short cell already showing `—`" - true for every tier, not just Tier A),
+and the user was independently asking whether it was needed at all, the
+call was to drop it from the render rather than fight for the last few
+pixels: `_append_badges()` no longer emits it.
+`WolfLaneLayout.badge_cannot_be_damaged_at_short()` itself stays, still
+covered by its own unit test - just unused by this caller now.
+
+That still left a smaller, ~1px-scale overflow for a full-capacity
+Battlestation with no badge at all (icon 94px + separation + 180px of
+text ≈ 282px against a 273px lane) - the same class of bug as the
+fourth fix's "guessed 0.8 height fraction had no relationship to how
+much width the text actually needed," just a narrower margin. Fixed
+properly this time rather than picking a smaller guessed constant:
+`_build_full_token()` now builds the text column FIRST, measures what it
+actually needs via `get_combined_minimum_size()` (both `WolfCodePips`
+and the ladder row's minimum-size logic are pure font metrics, reliable
+to query even off-tree, before either is added to any parent), and only
+then sizes the icon with whatever lane width is left over - capped at
+the old 0.8-of-height ceiling so small-content hulls (Fighter Wing,
+Destroyer) still get a large icon, floored at 0.4 so a future
+high-capacity hull can't shrink it to nothing, with a small fixed 2px
+safety margin absorbing Godot's own sub-pixel container-rounding rather
+than chasing it exactly. `_build_wolf_token()`/`_build_full_token()`
+both gained a `lane_width` parameter to make this possible.
+
+Verified with a driving script covering the actual worst case in the
+game (Battlestation, capacity 6, undamaged, with its `↻` returns icon -
+the widest content this screen ever draws) alongside Assault Transport
+(`4BP`), Strikecarrier (`+N`), Fighter Wing, and Cruiser, at Tier A:
+every case's real measured row width now fits its lane, with zero
+overlap between `code_row`'s children. Full test suite still green (39
+files).
+
+**Deliberately not built, scope boundary carried over honestly, not
+silently expanded**: this pass only touches the four STANDING phases
+(`targeting`/`range_long`/`range_medium`/`range_short`) that already
+render lanes. The spec's own §6 phase table also describes `boarding`
+(ladder dims to alpha 0.4, `4BP` badges come forward) and `resolve`
+(realised cell in CYAN, rest ghosted) behavior for the *lane* view - but
+in this codebase, `"boarding"` and `"resolution"` have never rendered
+lanes at all, using the separate `_boarding_panel`/`_resolution_panel`
+simple-list views inherited from v2 (a **pre-existing v3-scope gap**,
+not something this ladder pass introduced or was asked to fix - the v3
+lane spec's own §6.4 describes lane behavior at `resolve` that was never
+wired up either). The ladder's "realised cell" logic
+(`CellState.REALISED`) is fully built and already correct for a wolf
+destroyed mid-attack within the four STANDING phases; extending
+`boarding`/`resolution` to render lanes at all remains separate,
+undone work. Also still open: token pooling/tweening (unchanged from
+v3), and Small Ship footer badges (Gorgoneion/Vulcan still aren't
+`core/` objects - unrelated to the ladder specifically).
 
 New handoff folder `ui/design_handoff_damage_ladder/` - **read
 `spec/wolf_attack_damage_ladder.md` directly before starting**, it's the
@@ -1605,23 +1820,24 @@ project already draws everywhere else on this screen (v3's own
 `lane_floor()` sits next to it in `wolf_lane_layout.gd`, both backed by
 the new `core/wolf_damage.gd`).
 
-**A real disagreement between the spec and its own README - needs a
-call before building, not a guess**: spec §4 says the Tier A/B boundary
-itself moves to `max_stack ≤ 2` (tokens grow 100→118px to fit `L M S ✕`
-headers, so 3 no longer fits in the 332px stack zone: `3×118+2×10=374 >
-332`). The README explicitly overrides this in its own "Deviation from
-the spec" note: keep Tier A's boundary at `≤3` (unchanged from v3, and
-matching `WolfLaneLayout.TIERS`'s current `{"min":1,"max":3}` already
-built), drop the `118px`/headers only at exactly 2-or-fewer, and render
-3-stacked lanes as 100px tokens with a headerless 4-cell ladder replacing
-the ability line in the same space the single line used to occupy -
-reasoning given: "so the common board still looks like the live game"
-(apparently ~3 per lane is the typical case, and the spec's own boundary
-would make the *common* case visually shrink). This is a deliberate,
-reasoned deviation, not an inconsistency to silently pick a side on -
-worth a decision (probably favor the README's practical call, matching
-how `WolfLaneLayout.TIERS` is already built and tested, but confirm) before
-touching `WolfLaneLayout.TIERS`/`stack_zone_geometry()`.
+**[x] Tier A/B boundary - decided, go with the README's deviation, not
+the spec's literal §4.** spec §4 says the Tier A/B boundary itself moves
+to `max_stack ≤ 2` (tokens grow 100→118px to fit `L M S ✕` headers, so 3
+no longer fits in the 332px stack zone: `3×118+2×10=374 > 332`). The
+README overrides this in its own "Deviation from the spec" note: keep
+Tier A's boundary at `≤3` (unchanged from v3, and matching
+`WolfLaneLayout.TIERS`'s current `{"min":1,"max":3}` already built), drop
+the `118px`/headers only at exactly 2-or-fewer, and render 3-stacked
+lanes as 100px tokens with a headerless 4-cell ladder replacing the
+ability line in the same space the single line used to occupy - reasoning
+given: "so the common board still looks like the live game" (~3 per lane
+is the typical case, and the spec's own boundary would make the *common*
+case visually shrink every time). **User confirmed this call directly**
+(not inferred) - build `WolfLaneLayout.TIERS`/`stack_zone_geometry()`
+against the README's version: `{"min":1,"max":2}` for the headed 118px
+form, `{"min":3,"max":3}` (or folded into the existing B range's logic,
+implementer's call) for the headerless 100px form, `{"min":4,"max":8}`
+tier B unchanged onward.
 
 **Open item §10 ("verify before building, do not guess") is already
 answered by this project's own existing code**, not something to go

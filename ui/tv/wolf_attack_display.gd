@@ -193,6 +193,8 @@ func _refresh_standing(view: Dictionary) -> void:
 	var geo := WolfLaneLayout.stack_zone_geometry(stack_value)
 	var n_lanes: int = fleet_ship_ids.size()
 	var lane_width := WolfLaneLayout.lane_width_for(n_lanes)
+	var live_strikecarriers := WolfLaneLayout.live_strikecarrier_count(wolf_ships)
+	var fighter_wings_alive: int = view["fighter_wings_alive"]
 
 	_impact_arc.impact_y = geo["impact_y"]
 	_impact_arc.active_phase = phase
@@ -215,7 +217,7 @@ func _refresh_standing(view: Dictionary) -> void:
 	for fleet_ship: Dictionary in fleet_ships:
 		var ship_id: String = fleet_ship["id"]
 		var wolves: Array = lanes.get(ship_id, [])
-		var lane := _build_lane(fleet_ship, wolves, tier, lane_width, geo, phase, spines, lane_x)
+		var lane := _build_lane(fleet_ship, wolves, tier, lane_width, geo, phase, spines, lane_x, live_strikecarriers, fighter_wings_alive)
 		_lane_row.add_child(lane)
 		lane_x += lane_width + WolfLaneLayout.LANE_GAP
 
@@ -226,7 +228,6 @@ func _refresh_standing(view: Dictionary) -> void:
 	# P0-08: no "LIVE: <weapon>" debug line on the TV output - that's
 	# host-console material, not something 20 players standing around a
 	# battle map need to read off a screen.
-	var fighter_wings_alive: int = view["fighter_wings_alive"]
 	if phase == "range_short" and fighter_wings_alive > 0:
 		_phase_banner.text = WolfAttackTokens.fmt_display("⚠ All fleet damage must be assigned to Wolf fighter wings first")
 		_phase_banner.visible = true
@@ -359,11 +360,12 @@ func _refresh_wolf_tally(wolf_ships: Array) -> void:
 ## FleetCard). Appends this lane's spine descriptor (if attacked) to
 ## out_spines - the actual spine bar is drawn once for every lane by
 ## LaneSpines, not per-lane here, per §11's "one _draw() for all spines".
-func _build_lane(fleet_ship: Dictionary, wolves: Array, tier: Dictionary, lane_width: float, geo: Dictionary, phase: String, out_spines: Array[Dictionary], lane_x: float) -> Control:
+func _build_lane(fleet_ship: Dictionary, wolves: Array, tier: Dictionary, lane_width: float, geo: Dictionary, phase: String, out_spines: Array[Dictionary], lane_x: float, live_strikecarriers: int, live_fighter_wings: int) -> Control:
 	var ordered := WolfLaneLayout.order_lane(wolves)
-	var incoming_damage := WolfLaneLayout.incoming_damage_for_lane(ordered)
+	var ceiling := WolfLaneLayout.lane_ceiling(ordered, live_strikecarriers)
+	var floor_value := WolfLaneLayout.lane_floor(ordered, phase)
 	var incoming_bp := WolfLaneLayout.incoming_bp_for_lane(ordered)
-	var attacked := incoming_damage > 0 or incoming_bp > 0
+	var attacked := ceiling > 0 or incoming_bp > 0
 	var ship_id: String = fleet_ship["id"]
 	var color := WolfAttackTokens.ship_color(ship_id)
 
@@ -397,11 +399,13 @@ func _build_lane(fleet_ship: Dictionary, wolves: Array, tier: Dictionary, lane_w
 	stack.position = Vector2.ZERO
 	stack.size = Vector2(lane_width, stack_zone_bottom)
 	outer.add_child(stack)
-	_populate_stack(stack, ordered, tier, lane_width, stack_zone_bottom, phase)
+	_populate_stack(stack, ordered, tier, lane_width, stack_zone_bottom, phase, live_strikecarriers, live_fighter_wings)
 
-	# Spine - collected for LaneSpines to draw in a single pass.
+	# Spine - collected for LaneSpines to draw in a single pass. Width is
+	# driven by the ceiling (the total if nothing more is destroyed) - the
+	# floor doesn't change how threatening the lane looks at a glance.
 	if attacked:
-		var spine_width: float = clampf(float(incoming_damage), 2.0, 10.0)
+		var spine_width: float = clampf(float(ceiling), 2.0, 10.0)
 		out_spines.append({
 			"x": lane_x + lane_width * 0.5,
 			"width": spine_width,
@@ -409,13 +413,14 @@ func _build_lane(fleet_ship: Dictionary, wolves: Array, tier: Dictionary, lane_w
 			"bottom": WolfAttackTokens.Y_STACK_ZONE_TOP + card_local_top + 6.0,
 		})
 
-	# Incoming line.
-	var incoming_line := _build_incoming_line(attacked, phase, incoming_damage, incoming_bp)
+	# Incoming line - floor/ceiling range + bar (spec §5), replacing v3's
+	# single projection.
+	var incoming_line := _build_incoming_line(attacked, phase, floor_value, ceiling, incoming_bp, lane_width)
 	incoming_line.position = Vector2(0.0, incoming_local_top)
 	outer.add_child(incoming_line)
 
 	# Fleet card.
-	var card := _build_fleet_card(fleet_ship, color, attacked, incoming_damage, incoming_bp, lane_width, card_height)
+	var card := _build_fleet_card(fleet_ship, color, attacked, ceiling, incoming_bp, lane_width, card_height)
 	card.position = Vector2(0.0, card_local_top)
 	card.size = Vector2(lane_width, card_height)
 	outer.add_child(card)
@@ -425,7 +430,7 @@ func _build_lane(fleet_ship: Dictionary, wolves: Array, tier: Dictionary, lane_w
 ## Fills Stack with tokens, bottom-up left-to-right (§5.1), reserving the
 ## last slot for a "+N MORE" overflow chip when the lane exceeds the
 ## tier's per-lane capacity.
-func _populate_stack(stack: Control, ordered: Array, tier: Dictionary, lane_width: float, stack_zone_bottom: float, phase: String) -> void:
+func _populate_stack(stack: Control, ordered: Array, tier: Dictionary, lane_width: float, stack_zone_bottom: float, phase: String, live_strikecarriers: int, live_fighter_wings: int) -> void:
 	var slots := WolfLaneLayout.lane_display_slots(ordered.size(), tier)
 	var shown: int = slots["shown"]
 	var overflow: int = slots["overflow"]
@@ -441,7 +446,7 @@ func _populate_stack(stack: Control, ordered: Array, tier: Dictionary, lane_widt
 		var wolf_class: String = wolf["class"]
 		var wolf_destroyed: bool = wolf["destroyed"]
 		var must_target_first: bool = phase == "range_short" and wolf_class == "fighter_wing" and not wolf_destroyed
-		var token := _build_wolf_token(wolf, tier["form"], content_level, must_target_first, height)
+		var token := _build_wolf_token(wolf, tier, content_level, must_target_first, height, phase, live_strikecarriers, live_fighter_wings, lane_width)
 		token.position = Vector2(float(slot.x) * (token_width + gap), stack_zone_bottom - float(slot.y + 1) * height - float(slot.y) * gap)
 		token.size = Vector2(token_width, height)
 		stack.add_child(token)
@@ -477,19 +482,20 @@ func _build_overflow_chip(count: int) -> Control:
 ## dim only the contents" alternative (see TODO.md).
 ##
 ## available_height is the actual pixel budget the token will be placed
-## into (tier["height"]) - the full form needs it to size its icon
-## correctly (see _build_full_token); the compact form ignores it, its
-## single HBoxContainer row already fits comfortably in every tier's
-## fixed height.
-func _build_wolf_token(wolf: Dictionary, form: String, content_level: int, must_target_first: bool, available_height: float) -> Control:
+## into (tier["height"]); lane_width is the token's own horizontal slot -
+## the full form needs both to size its icon correctly against however
+## much room the text column actually needs (see _build_full_token); the
+## compact form ignores both, its single HBoxContainer row already fits
+## comfortably in every tier's fixed height.
+func _build_wolf_token(wolf: Dictionary, tier: Dictionary, content_level: int, must_target_first: bool, available_height: float, phase: String, live_strikecarriers: int, live_fighter_wings: int, lane_width: float) -> Control:
 	var destroyed: bool = wolf["destroyed"]
 	var code: String = WolfShipDefinitions.CLASS_CODES.get(WolfShipDefinitions.Class[wolf["class"].to_upper()], "??")
 
 	var content: Control
-	if form == "full":
-		content = _build_full_token(wolf, code, available_height)
+	if tier["form"] == "full":
+		content = _build_full_token(wolf, code, available_height, tier["ladder_headers"], phase, live_strikecarriers, live_fighter_wings, lane_width)
 	else:
-		content = _build_compact_token(wolf, code, content_level, must_target_first)
+		content = _build_compact_token(wolf, code, content_level, must_target_first, tier["name"], phase, live_strikecarriers, live_fighter_wings)
 
 	# content is a VBoxContainer/PanelContainer - adding the strikethrough
 	# as ITS child would have the container lay it out as another row/
@@ -516,68 +522,238 @@ func _build_wolf_token(wolf: Dictionary, form: String, content_level: int, must_
 		holder.add_child(strike)
 	return holder
 
-## Real bug fixed here (reported from a live screenshot, not caught by
-## the earlier structural driving script - that script only checked
-## token/lane counts, never each token's actual rendered layout): the
-## icon/code-row/ability-text stack used fixed guessed heights (52 + 34 +
-## an unmeasured Label) that summed to well over the tier's 100px slot,
-## and VBoxContainer/Control don't clip children that exceed their
-## parent's rect by default - the ability text (e.g. "PREVENTS 1") bled
-## straight down through the impact arc and incoming-damage line below
-## it. Fixed by measuring the code-row and ability rows from their real
-## font metrics and giving the icon whatever's actually left, so the
-## three rows are guaranteed to sum to exactly available_height - no
-## guessed constant can silently stop fitting again. holder.clip_contents
-## (see _build_wolf_token) is kept as a defensive backstop, not a
-## substitute for this.
-func _build_full_token(wolf: Dictionary, code: String, available_height: float) -> Control:
+## Maps a WolfLaneLayout.CellState to the colour it renders in - kept
+## here, not in wolf_lane_layout.gd, so that pure-logic file stays free
+## of any WolfAttackTokens/visual dependency (it already keeps colour
+## decisions out of its own functions on purpose).
+func _cell_color(state: WolfLaneLayout.CellState) -> Color:
+	match state:
+		WolfLaneLayout.CellState.CURRENT, WolfLaneLayout.CellState.REALISED:
+			return WolfAttackTokens.CYAN
+		WolfLaneLayout.CellState.FUTURE:
+			return WolfAttackTokens.INK_DIM
+		WolfLaneLayout.CellState.SURVIVES_LIVE:
+			return WolfAttackTokens.ALERT
+		_:  # PASSED, GHOSTED, SURVIVES_GHOSTED
+			return WolfAttackTokens.INK_GHOST
+
+func _cell_boxed(state: WolfLaneLayout.CellState) -> bool:
+	return state == WolfLaneLayout.CellState.CURRENT or state == WolfLaneLayout.CellState.REALISED
+
+## One ladder value cell - a plain Label, or (for the current/realised
+## cell) the same Label wrapped in a 1px bordered box, per spec §3.1.
+func _build_ladder_value_cell(text: String, color: Color, boxed: bool, font_token: String) -> Control:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	WolfAttackTokens.apply(label, font_token)
+	label.add_theme_color_override("font_color", color)
+	if not boxed:
+		return label
+	var box := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.set_border_width_all(1)
+	style.border_color = color
+	style.bg_color = Color(0, 0, 0, 0)
+	style.set_content_margin_all(2)
+	box.add_theme_stylebox_override("panel", style)
+	box.add_child(label)
+	return box
+
+## The 4-cell damage ladder (spec §3) - full form (Tier A/A2) always uses
+## this; compact forms build their own tighter single-line variant
+## (_build_compact_ladder_line) instead, since there's no room here for a
+## second row even without headers.
+func _build_ladder_row(wolf: Dictionary, phase: String, live_strikecarriers: int, with_headers: bool, font_token: String) -> Control:
+	var values := WolfLaneLayout.ladder_cell_values(wolf, live_strikecarriers)
+	var states := WolfLaneLayout.ladder_cell_states(wolf, phase)
+
 	var column := VBoxContainer.new()
-	column.alignment = BoxContainer.ALIGNMENT_BEGIN
-	var gap := 4.0
-	column.add_theme_constant_override("separation", int(gap))
+	column.add_theme_constant_override("separation", 2)
 
-	# code_pips is a bare Control (WolfCodePips) with no intrinsic minimum
-	# size - unlike the ability Label below, it never enforces a real
-	# metric-driven height on its own, so a tight fixed multiple of the
-	# font size (comfortably covers baseline + descenders + pip circles,
-	# per WolfCodePips._draw()'s own offsets) is enough room and leaves
-	# more of the budget for the icon than the font's full technical
-	# line-height (ascent+descent+line-gap) would.
-	var code_row_height := WolfAttackTokens.font_size("T_WOLF_CODE") * 1.05
-	# The ability Label DOES enforce its own real font-metric minimum
-	# size regardless of what's requested here, so this has to match
-	# that real metric or the label wins the size fight and overflows
-	# again.
-	var ability_row_height := WolfAttackTokens.font("T_WOLF_ABILITY").get_height(WolfAttackTokens.font_size("T_WOLF_ABILITY"))
-	var icon_height := maxf(available_height - gap * 2.0 - code_row_height - ability_row_height, 18.0)
+	if with_headers:
+		var header_row := HBoxContainer.new()
+		header_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		header_row.add_theme_constant_override("separation", 6)
+		for h in ["L", "M", "S", "✕"]:
+			var hl := Label.new()
+			hl.text = h
+			hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			hl.size_flags_horizontal = SIZE_EXPAND_FILL
+			WolfAttackTokens.apply(hl, "T_LADDER_HEADER")
+			hl.add_theme_color_override("font_color", WolfAttackTokens.INK_DIM)
+			header_row.add_child(hl)
+		column.add_child(header_row)
 
-	var icon := ShipIcon.new()
-	icon.icon_id = wolf["class"]
-	icon.icon_color = WolfAttackTokens.INK_GHOST if wolf["destroyed"] else WolfAttackTokens.INK
-	icon.custom_minimum_size = Vector2(0, icon_height)
-	icon.size_flags_horizontal = SIZE_EXPAND_FILL
-	column.add_child(icon)
+	var value_row := HBoxContainer.new()
+	value_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	value_row.add_theme_constant_override("separation", 6)
+	for i in 4:
+		var text := "—" if values[i] == null else str(values[i])
+		var cell := _build_ladder_value_cell(text, _cell_color(states[i]), _cell_boxed(states[i]), font_token)
+		cell.size_flags_horizontal = SIZE_EXPAND_FILL
+		value_row.add_child(cell)
+	column.add_child(value_row)
 
+	return column
+
+## Tier B/C/D's single-line ladder, replacing the ability abbreviation
+## text in the same space it used to occupy (§4's tier table). B shows
+## all 4 cells inline ("0·1·2·3"); C collapses to "now▸survives"; D shows
+## the survives value alone in ALERT.
+func _build_compact_ladder_line(wolf: Dictionary, phase: String, live_strikecarriers: int, tier_name: String) -> Control:
+	var values := WolfLaneLayout.ladder_cell_values(wolf, live_strikecarriers)
+	var states := WolfLaneLayout.ladder_cell_states(wolf, phase)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 2)
+
+	if tier_name == "D":
+		var cell := _build_ladder_value_cell(str(values[3]), WolfAttackTokens.ALERT, false, "T_LADDER_CELL_COMPACT")
+		row.add_child(cell)
+		return row
+
+	if tier_name == "C":
+		var current := WolfLaneLayout.current_cell_index(phase)
+		var now_index := current if current != -1 else 3
+		var now_text := "—" if values[now_index] == null else str(values[now_index])
+		row.add_child(_build_ladder_value_cell(now_text, _cell_color(states[now_index]), _cell_boxed(states[now_index]), "T_LADDER_CELL_COMPACT"))
+		var sep := Label.new()
+		sep.text = "▸"
+		WolfAttackTokens.apply(sep, "T_LADDER_CELL_COMPACT")
+		sep.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST)
+		row.add_child(sep)
+		row.add_child(_build_ladder_value_cell(str(values[3]), WolfAttackTokens.ALERT, false, "T_LADDER_CELL_COMPACT"))
+		return row
+
+	# Tier B: all 4 cells inline, "·" separated.
+	for i in 4:
+		if i > 0:
+			var sep := Label.new()
+			sep.text = "·"
+			WolfAttackTokens.apply(sep, "T_LADDER_CELL_COMPACT")
+			sep.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST)
+			row.add_child(sep)
+		var text := "—" if values[i] == null else str(values[i])
+		row.add_child(_build_ladder_value_cell(text, _cell_color(states[i]), _cell_boxed(states[i]), "T_LADDER_CELL_COMPACT"))
+	return row
+
+## Badges (spec §3.3), appended after the code/pips row - ↻ stays inline
+## inside WolfCodePips itself (show_returns, unchanged from before this
+## redesign); the rest are separate small elements since they don't fit
+## WolfCodePips's own custom-draw layout.
+##
+## ⊘S (Battlestation "cannot be damaged at Short") deliberately dropped
+## from the render here, though WolfLaneLayout.badge_cannot_be_damaged_at_short()
+## itself stays (still unit-tested pure logic, just unused by this
+## caller) - real user feedback against docs/wolf_attack_v4.png plus a
+## driving script together showed it wasn't just visually colliding with
+## the code/pips row, there flatly wasn't room for it: a live-capacity
+## Battlestation's code+6 pips+↻ already needs ~180px, and Tier A's
+## icon-left column only has ~170px total once the (now much bigger,
+## per that same feedback) icon takes its share of the lane. The badge
+## was already documented as redundant the moment it was added ("spec
+## says show only at Tier A" for legibility - see the ladder's own Short
+## cell, which already renders "—" for every Battlestation, every tier,
+## with no extra badge needed to say the same thing twice).
+func _append_badges(row: HBoxContainer, wolf: Dictionary, live_fighter_wings: int) -> void:
+	var bp := WolfLaneLayout.badge_boarding_parties(wolf)
+	if bp > 0:
+		row.add_child(_make_chip("%dBP" % bp, WolfAttackTokens.ALERT_DEEP, WolfAttackTokens.INK, true))
+
+	var fw_buff := WolfLaneLayout.badge_fw_buff(wolf, live_fighter_wings)
+	if fw_buff > 0:
+		var label := Label.new()
+		label.text = "+%d" % fw_buff
+		WolfAttackTokens.apply(label, "T_BADGE")
+		label.add_theme_color_override("font_color", WolfAttackTokens.ALERT)
+		row.add_child(label)
+
+## Icon left (large, uses the full token height), code/pips/badges +
+## ladder stacked in a column to its right - not the icon-on-top layout
+## v3 originally had. Real user feedback against a live screenshot
+## (docs/wolf_attack_v4.png) drove this: the old vertical stack squeezed
+## the icon down to whatever sliver was left after two text rows, making
+## it borderline illegible, and left the icon dead-centred over mostly
+## empty lane width. Icon-left uses the token's full height for the icon
+## (no more measure-three-rows-and-subtract arithmetic - see the bug note
+## below) and gives the text column the lane's actual width, which is the
+## dimension that was going spare before.
+##
+## Real bug fixed here once already, from that same screenshot: the old
+## layout gave WolfCodePips a custom_minimum_size with WIDTH 0 and no
+## expand flag, so the code/pips row collapsed to nothing and every badge
+## appended after it (4BP, ⊘S) rendered stacked on top of the code text
+## instead of beside it - "grey 2 letters under BS", "4BP under the
+## Assault Transport" were this same collapse, not two separate bugs.
+## Fixed by giving code_pips SIZE_EXPAND_FILL the same way the compact
+## form already correctly did (this file's own working code sitting right
+## next to the broken version the whole time).
+##
+## Second pass, same screenshot: a flat `available_height * 0.8` icon
+## width also wasn't safe - it was sized off height alone, with no
+## relationship to how much width the text column actually needed. A
+## fixed 0.8 fraction happened to leave enough room for most hulls but
+## NOT a full-capacity Battlestation's code+6 pips+"↻" (the widest real
+## content this screen ever draws): icon(94px)+column(180px needed)
+## exceeded even the full 273px lane width, clipped invisibly by the
+## token's own clip_contents holder. Content-aware sizing (this file's
+## own established fix for the last two overflow bugs) applies here too:
+## build the text column FIRST, measure what it actually needs via
+## get_combined_minimum_size() (cheap and correct off-tree, since neither
+## WolfCodePips's nor the ladder cells' minimum-size logic depends on
+## being inside the SceneTree), and only THEN size the icon with
+## whatever's left - capped at the old 0.8 ceiling so small-content hulls
+## (Fighter Wing, Destroyer) still get a generously large icon, floored
+## at 0.4 so a pathological future hull can't shrink it to nothing.
+func _build_full_token(wolf: Dictionary, code: String, available_height: float, with_headers: bool, phase: String, live_strikecarriers: int, live_fighter_wings: int, lane_width: float) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.size_flags_horizontal = SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", 4)
+
+	var code_row := HBoxContainer.new()
+	code_row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	code_row.add_theme_constant_override("separation", 6)
 	var code_pips := WolfCodePips.new()
 	code_pips.code_text = code
 	code_pips.capacity = wolf["capacity"]
 	code_pips.damage_taken = wolf["damage_taken"]
-	code_pips.show_returns = wolf["returns_if_survives"]
+	code_pips.show_returns = WolfLaneLayout.badge_returns(wolf)
 	code_pips.destroyed = wolf["destroyed"]
-	code_pips.custom_minimum_size = Vector2(0, code_row_height)
-	column.add_child(code_pips)
+	code_pips.custom_minimum_size = Vector2(0, WolfAttackTokens.font_size("T_WOLF_CODE") * 1.05)
+	code_pips.size_flags_horizontal = SIZE_EXPAND_FILL
+	code_row.add_child(code_pips)
+	_append_badges(code_row, wolf, live_fighter_wings)
+	column.add_child(code_row)
 
-	var ability := Label.new()
-	ability.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ability.clip_text = true
-	ability.text = WolfAttackTokens.fmt_display(WolfLaneLayout.ability_label_full(wolf))
-	WolfAttackTokens.apply(ability, "T_WOLF_ABILITY")
-	ability.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST if wolf["destroyed"] else WolfAttackTokens.ALERT)
-	column.add_child(ability)
+	var ladder_font := "T_LADDER_CELL" if with_headers else "T_LADDER_CELL_COMPACT"
+	var ladder_row := _build_ladder_row(wolf, phase, live_strikecarriers, with_headers, ladder_font)
+	column.add_child(ladder_row)
 
-	return column
+	var content_width := maxf(code_row.get_combined_minimum_size().x, ladder_row.get_combined_minimum_size().x)
+	# -2px beyond the exact leftover: HBoxContainer distributes fractional
+	# pixels across children when lane_width isn't a whole number (it
+	# rarely is - 1730/6 lanes etc.), which can round a child's final
+	# assigned size up by a pixel or two past what this arithmetic alone
+	# predicts. A small fixed margin is cheaper and more robust than
+	# chasing Godot's internal rounding rules pixel-for-pixel.
+	var available_for_icon := lane_width - 8.0 - content_width - 2.0
+	var icon_width := clampf(available_for_icon, available_height * 0.4, available_height * 0.8)
 
-func _build_compact_token(wolf: Dictionary, code: String, content_level: int, must_target_first: bool) -> Control:
+	var icon := ShipIcon.new()
+	icon.icon_id = wolf["class"]
+	icon.icon_color = WolfAttackTokens.INK_GHOST if wolf["destroyed"] else WolfAttackTokens.INK
+	icon.custom_minimum_size = Vector2(icon_width, available_height)
+	row.add_child(icon)
+	row.add_child(column)
+
+	return row
+
+func _build_compact_token(wolf: Dictionary, code: String, content_level: int, must_target_first: bool, tier_name: String, phase: String, live_strikecarriers: int, live_fighter_wings: int) -> Control:
 	var row := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(WolfAttackTokens.CARD_BG, 0.86)
@@ -609,7 +785,7 @@ func _build_compact_token(wolf: Dictionary, code: String, content_level: int, mu
 		code_pips.code_text = code
 		code_pips.capacity = wolf["capacity"]
 		code_pips.damage_taken = wolf["damage_taken"]
-		code_pips.show_returns = wolf["returns_if_survives"]
+		code_pips.show_returns = WolfLaneLayout.badge_returns(wolf)
 		code_pips.destroyed = wolf["destroyed"]
 		code_pips.font_token = "T_COMPACT_CODE"
 		code_pips.pip_radius = 3.5
@@ -626,18 +802,24 @@ func _build_compact_token(wolf: Dictionary, code: String, content_level: int, mu
 		content.add_child(numeric)
 
 	if content_level <= 1:
-		var ability := Label.new()
-		ability.text = WolfAttackTokens.fmt_display(WolfLaneLayout.ability_abbrev(wolf))
-		ability.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		WolfAttackTokens.apply(ability, "T_COMPACT_ABILITY")
-		ability.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST if wolf["destroyed"] else WolfAttackTokens.ALERT)
-		content.add_child(ability)
+		content.add_child(_build_compact_ladder_line(wolf, phase, live_strikecarriers, tier_name))
+		if WolfLaneLayout.badge_boarding_parties(wolf) > 0 or WolfLaneLayout.badge_fw_buff(wolf, live_fighter_wings) > 0:
+			_append_badges(content, wolf, live_fighter_wings)
 
 	return row
 
-func _build_incoming_line(attacked: bool, phase: String, incoming_damage: int, incoming_bp: int) -> Control:
+## §5's floor/ceiling range replaces v3's single projection: the ▼ number
+## is the ceiling (what lands if nothing more is destroyed), and a bar
+## underneath shows how much of that is the floor (solid ALERT - already
+## unpreventable even with perfect shooting this phase) versus still
+## preventable (outlined ALERT @ 0.35). "Is this lane worth shooting at"
+## is exactly the arithmetic the host should never do by hand.
+func _build_incoming_line(attacked: bool, phase: String, floor_value: int, ceiling: int, incoming_bp: int, lane_width: float) -> Control:
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 4)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
+	column.add_child(row)
 
 	if phase == "targeting" and not attacked:
 		var dash := Label.new()
@@ -650,7 +832,7 @@ func _build_incoming_line(attacked: bool, phase: String, incoming_damage: int, i
 		WolfAttackTokens.apply(waiting, "T_DMG_SUFFIX")
 		waiting.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST)
 		row.add_child(waiting)
-		return row
+		return column
 
 	if not attacked:
 		var dash := Label.new()
@@ -663,7 +845,7 @@ func _build_incoming_line(attacked: bool, phase: String, incoming_damage: int, i
 		WolfAttackTokens.apply(no_contact, "T_DMG_SUFFIX")
 		no_contact.add_theme_color_override("font_color", WolfAttackTokens.INK_GHOST)
 		row.add_child(no_contact)
-		return row
+		return column
 
 	var marker := Label.new()
 	marker.text = "▼"
@@ -672,7 +854,7 @@ func _build_incoming_line(attacked: bool, phase: String, incoming_damage: int, i
 	row.add_child(marker)
 
 	var number := Label.new()
-	number.text = str(incoming_damage)
+	number.text = str(ceiling)
 	WolfAttackTokens.apply(number, "T_INCOMING_NUM")
 	number.add_theme_color_override("font_color", WolfAttackTokens.ALERT)
 	row.add_child(number)
@@ -691,7 +873,35 @@ func _build_incoming_line(attacked: bool, phase: String, incoming_damage: int, i
 		row.add_child(dot)
 		row.add_child(_make_chip("%d BP" % incoming_bp, WolfAttackTokens.ALERT_DEEP, WolfAttackTokens.INK, true))
 
-	return row
+	column.add_child(_build_floor_ceiling_bar(floor_value, ceiling, lane_width))
+	return column
+
+## Solid ALERT for the floor portion, 1px outlined ALERT @ 0.35 for the
+## preventable remainder up to the ceiling. ceiling is guaranteed > 0
+## here (the caller only reaches this when attacked is true).
+func _build_floor_ceiling_bar(floor_value: int, ceiling: int, lane_width: float) -> Control:
+	var bar := Control.new()
+	bar.custom_minimum_size = Vector2(lane_width, 4.0)
+
+	var outline := PanelContainer.new()
+	outline.anchor_right = 1.0
+	outline.anchor_bottom = 1.0
+	var outline_style := StyleBoxFlat.new()
+	outline_style.bg_color = Color(0, 0, 0, 0)
+	outline_style.set_border_width_all(1)
+	outline_style.border_color = Color(WolfAttackTokens.ALERT, 0.35)
+	outline.add_theme_stylebox_override("panel", outline_style)
+	bar.add_child(outline)
+
+	var floor_ratio := clampf(float(floor_value) / float(ceiling), 0.0, 1.0)
+	if floor_ratio > 0.0:
+		var solid := ColorRect.new()
+		solid.color = WolfAttackTokens.ALERT
+		solid.anchor_bottom = 1.0
+		solid.anchor_right = floor_ratio
+		bar.add_child(solid)
+
+	return bar
 
 ## Fixed-height card, dark translucent backing, 4px signature-color bar,
 ## SEC moved inside the card's top-right corner (§7 - v2 had it above
@@ -827,8 +1037,9 @@ func _refresh_staging_pool(untargeted: Array, tier: Dictionary, phase: String) -
 	_staging_pool_label.text = WolfAttackTokens.fmt_display("Staging Pool — Assigning Targets")
 	WolfAttackTokens.apply(_staging_pool_label, "T_FOOTER_LABEL")
 	_staging_pool_label.add_theme_color_override("font_color", WolfAttackTokens.CYAN)
+	var pool_tier := {"form": "compact", "name": "B"}
 	for wolf: Dictionary in WolfLaneLayout.order_lane(untargeted):
-		var token := _build_wolf_token(wolf, "compact", 0, false, 34.0)
+		var token := _build_wolf_token(wolf, pool_tier, 0, false, 34.0, phase, 0, 0, 214.0)
 		token.custom_minimum_size = Vector2(214, 34)
 		_staging_pool_flow.add_child(token)
 

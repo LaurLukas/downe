@@ -75,7 +75,7 @@ static func build(game_state: GameState) -> Dictionary:
 		"turn": attack.turn_number,
 		"round": attack.round_number,
 		"pursuit": game_state.pursuit_track.value,
-		"wolf_ships": _build_wolf_ships(attack, targets_visible, in_range_phase, current_range, live_fighter_wings),
+		"wolf_ships": _build_wolf_ships(attack, targets_visible, in_range_phase, current_range),
 		"fleet_ships": _build_fleet_ships(game_state, attack, damage_total, damage_so_far),
 		"live_fleet_weapons": _live_fleet_weapons(game_state, attack.phase),
 		"returning": returning,
@@ -84,7 +84,7 @@ static func build(game_state: GameState) -> Dictionary:
 		"fighter_wings_alive": live_fighter_wings,
 	}
 
-static func _build_wolf_ships(attack: WolfAttack, targets_visible: bool, in_range_phase: bool, current_range: WolfShipDefinitions.RangePhase, live_fighter_wings: int) -> Array[Dictionary]:
+static func _build_wolf_ships(attack: WolfAttack, targets_visible: bool, in_range_phase: bool, current_range: WolfShipDefinitions.RangePhase) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id: String in attack.wolf_ships:
 		var ship: WolfShipState = attack.wolf_ships[id]
@@ -95,22 +95,18 @@ static func _build_wolf_ships(attack: WolfAttack, targets_visible: bool, in_rang
 			"capacity": ship.capacity(),
 			"damage_taken": ship.damage_taken,
 			"destroyed": ship.is_destroyed(),
+			# -1 = still alive, or destroyed outside a range phase. Used by
+			# the damage-ladder redesign to show a destroyed wolf's actually
+			# realised cell (docs/wolf_attack_damage_ladder.md §6's "resolve"
+			# rule, extended here to any phase a wolf is already destroyed
+			# in, not just RESOLUTION - once a ship is destroyed its ladder
+			# outcome is locked in regardless of what phase is current now).
+			"destroyed_at_phase": ship.destroyed_at_phase,
 			"returns_if_survives": WolfShipDefinitions.returns_if_survives(ship.wolf_class),
 			"immune_this_phase": immune_this_phase,
-			"prevents": null,
-			"boarders": 0,
 		}
 		if targets_visible:
 			entry["target"] = ship.target_ship_id()
-
-		if in_range_phase and not ship.is_destroyed():
-			if ship.wolf_class == WolfShipDefinitions.Class.ASSAULT_TRANSPORT:
-				entry["boarders"] = WolfShipDefinitions.boarding_parties_if_survives(ship.wolf_class)
-			elif ship.wolf_class == WolfShipDefinitions.Class.STRIKECARRIER:
-				entry["prevents"] = live_fighter_wings
-			elif not immune_this_phase:
-				var damage_if_destroyed_now := WolfShipDefinitions.damage_if_destroyed_at(ship.wolf_class, current_range)
-				entry["prevents"] = WolfShipDefinitions.damage_if_survives(ship.wolf_class) - damage_if_destroyed_now
 
 		out.append(entry)
 	return out

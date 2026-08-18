@@ -32,6 +32,30 @@ var pip_gap: float = PIP_GAP
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+## Real bug (docs/wolf_attack_v4.png, second pass): this Control drew
+## unclipped content - code text, then every pip, then (last) the "↻"
+## returns glyph - starting at local x=0 regardless of whatever rect a
+## parent container actually gave it. Callers only ever set
+## custom_minimum_size's WIDTH to 0 (relying on SIZE_EXPAND_FILL to grab
+## "enough" space), so a HBoxContainer sizing this against a fixed sibling
+## (the ⊘S/4BP badge) had no idea how wide the drawn content truly was -
+## for a high-capacity hull like Battlestation (10 pips) the real content
+## ran well past whatever narrower width the container guessed, drawing
+## straight through the badge sitting to its right. A real
+## _get_minimum_size() override fixes this at the source: containers now
+## reserve the actual pixel width this Control is going to draw into, for
+## any capacity/code/returns-icon combination, instead of guessing.
+func _get_minimum_size() -> Vector2:
+	var font := WolfAttackTokens.font(font_token)
+	var font_size := WolfAttackTokens.font_size(font_token)
+	var code_width := font.get_string_size(code_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	# hollow_count + filled_count always sums to capacity (see _draw()) -
+	# destroyed or not, every pip position gets drawn.
+	var width := code_width + 18.0 + float(capacity) * pip_gap
+	if show_returns and not destroyed:
+		width += 2.0 + font.get_string_size("↻", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	return Vector2(width, font_size * 1.05)
+
 func _draw() -> void:
 	var color := WolfAttackTokens.INK_GHOST if destroyed else WolfAttackTokens.INK
 	var font := WolfAttackTokens.font(font_token)

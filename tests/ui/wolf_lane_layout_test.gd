@@ -59,8 +59,17 @@ func test_max_stack_ignores_the_staging_pool() -> void:
 	assert_eq(WolfLaneLayout.max_stack(lanes), 1, "the staging pool should never inflate max_stack")
 
 func test_tier_boundaries() -> void:
-	assert_eq(WolfLaneLayout.tier_for(1)["name"], "A", "1 should be tier A")
-	assert_eq(WolfLaneLayout.tier_for(3)["name"], "A", "3 should still be tier A")
+	# Tier A/A2 split (damage ladder redesign, docs/wolf_attack_damage_ladder.md
+	# §4 as deviated by its own README, user-confirmed - see TODO.md): full
+	# 118px headed tokens only at <=2 per lane, headerless 100px tokens at
+	# exactly 3, matching the original (pre-ladder) v3 tier A arithmetic.
+	assert_eq(WolfLaneLayout.tier_for(1)["name"], "A", "1 should be tier A (headed)")
+	assert_eq(WolfLaneLayout.tier_for(2)["name"], "A", "2 should still be tier A (headed)")
+	assert_eq(WolfLaneLayout.tier_for(3)["name"], "A2", "3 should be the headerless A2 tier, not roll over to B")
+	assert_true(WolfLaneLayout.tier_for(1)["ladder_headers"], "tier A shows L M S ✕ headers")
+	assert_true(not WolfLaneLayout.tier_for(3)["ladder_headers"], "tier A2 has no headers")
+	assert_eq(WolfLaneLayout.tier_for(1)["height"], 118.0, "tier A tokens are 118px to fit the header row")
+	assert_eq(WolfLaneLayout.tier_for(3)["height"], 100.0, "tier A2 tokens stay 100px, unchanged from pre-ladder v3")
 	assert_eq(WolfLaneLayout.tier_for(4)["name"], "B", "4 should roll over into tier B")
 	assert_eq(WolfLaneLayout.tier_for(8)["name"], "B", "8 should still be tier B")
 	assert_eq(WolfLaneLayout.tier_for(9)["name"], "C", "9 should roll over into tier C")
@@ -126,14 +135,42 @@ func test_lane_display_slots_overflow_reserves_one_chip_slot() -> void:
 	assert_eq(slots["shown"], 22, "over the 23-slot D+ capacity should show capacity - 1 tokens")
 	assert_eq(slots["overflow"], 8, "the remainder should be folded into the +N MORE chip")
 
-func test_incoming_damage_sums_live_wolves_only() -> void:
+func test_lane_ceiling_sums_live_wolves_only() -> void:
 	var wolves := [
 		_wolf("live_cr", "cruiser", "aegis"),
 		_wolf("dead_cr", "cruiser", "aegis", true),
 		_wolf("live_de", "destroyer", "aegis"),
 	]
 	# cruiser survives-damage = 3, destroyer survives-damage = 2, destroyed wolves contribute nothing
-	assert_eq(WolfLaneLayout.incoming_damage_for_lane(wolves), 5, "incoming damage should sum only live wolves' survives-damage")
+	assert_eq(WolfLaneLayout.lane_ceiling(wolves, 0), 5, "ceiling should sum only live wolves' survives-damage")
+
+func test_lane_ceiling_applies_the_strikecarrier_buff_to_fighter_wings_only() -> void:
+	var wolves := [_wolf("fw", "fighter_wing", "aegis"), _wolf("sc", "strikecarrier", "aegis")]
+	# fighter wing base 1 + 1 live strikecarrier * bonus 1 = 2; strikecarrier itself stays flat 2
+	assert_eq(WolfLaneLayout.lane_ceiling(wolves, 1), 4, "fighter wing ceiling should rise with the live strikecarrier count, the strikecarrier's own ceiling should not")
+
+func test_lane_floor_zero_during_targeting() -> void:
+	var wolves := [_wolf("cr", "cruiser", "aegis")]
+	assert_eq(WolfLaneLayout.lane_floor(wolves, "targeting"), 0, "no range phase has happened yet - the whole ceiling is still preventable")
+
+func test_lane_floor_uses_the_current_range_phase() -> void:
+	var wolves := [_wolf("cr", "cruiser", "aegis"), _wolf("de", "destroyer", "aegis")]
+	assert_eq(WolfLaneLayout.lane_floor(wolves, "range_long"), 1, "cruiser destroyed-at-long=0, destroyer destroyed-at-long=1")
+	assert_eq(WolfLaneLayout.lane_floor(wolves, "range_short"), 3, "cruiser destroyed-at-short=2, destroyer destroyed-at-short=1")
+
+func test_lane_floor_skips_wolves_immune_this_phase() -> void:
+	var wolves := [_wolf("bs", "battlestation", "aegis")]
+	assert_eq(WolfLaneLayout.lane_floor(wolves, "range_short"), 0, "battlestation cannot be destroyed at short - contributes nothing to the floor there")
+	assert_eq(WolfLaneLayout.lane_floor(wolves, "range_long"), 3, "but does contribute at long, where it can be destroyed")
+
+func test_live_strikecarrier_count_is_attack_wide_not_lane_scoped() -> void:
+	var wolf_ships := [
+		_wolf("sc1", "strikecarrier", "aegis"),
+		_wolf("sc2", "strikecarrier", "dione"),
+		_wolf("sc3_dead", "strikecarrier", "aegis", true),
+		_wolf("cr", "cruiser", "aegis"),
+	]
+	assert_eq(WolfLaneLayout.live_strikecarrier_count(wolf_ships), 2, "should count live strikecarriers across every lane in the whole attack, not just one")
 
 func test_incoming_bp_only_counts_live_assault_transports() -> void:
 	var wolves := [
@@ -152,34 +189,27 @@ func test_incoming_bp_ignores_core_range_phase_gating() -> void:
 	assert_true(not wolves[0].has("boarders"), "sanity check: the fixture deliberately omits the core-provided boarders field")
 	assert_eq(WolfLaneLayout.incoming_bp_for_lane(wolves), 4, "boarding parties should be derivable even without core's phase-gated field")
 
-func test_ability_label_full_assault_transport_ignores_core_range_phase_gating() -> void:
-	# Regression guard for the exact bug reported from real host-console
-	# use: the token's own "PREVENTS N BP" text used to read core's
-	# phase-gated "boarders" field directly and printed "PREVENTS 0 BP"
-	# during "targeting" for a wolf that already had a real target.
-	var wolf := _wolf("at", "assault_transport", "aegis")
-	assert_true(not wolf.has("boarders"), "sanity check: the fixture deliberately omits the core-provided boarders field")
-	assert_eq(WolfLaneLayout.ability_label_full(wolf), "PREVENTS 4 BP", "the full label must not read 0 just because core hasn't populated boarders yet")
-	assert_eq(WolfLaneLayout.ability_abbrev(wolf), "4BP", "the compact abbreviation must not read 0 either")
+func test_badge_returns_only_for_battlestation_and_fighter_wing() -> void:
+	assert_true(WolfLaneLayout.badge_returns(_wolf("w", "battlestation", "aegis")), "battlestation returns")
+	assert_true(WolfLaneLayout.badge_returns(_wolf("w", "fighter_wing", "aegis")), "fighter wing returns")
+	assert_true(not WolfLaneLayout.badge_returns(_wolf("w", "cruiser", "aegis")), "cruiser does not return")
+	assert_true(not WolfLaneLayout.badge_returns(_wolf("w", "battlestation", "aegis", true)), "a destroyed ship is not returning")
 
-func test_ability_label_full_destroyed_overrides_everything() -> void:
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "battlestation", "aegis", true)), "DESTROYED", "destroyed should override the hull's normal ability text")
+func test_badge_boarding_parties_only_for_live_assault_transport() -> void:
+	assert_eq(WolfLaneLayout.badge_boarding_parties(_wolf("w", "assault_transport", "aegis")), 4, "assault transport contributes 4 boarding parties")
+	assert_eq(WolfLaneLayout.badge_boarding_parties(_wolf("w", "assault_transport", "aegis", true)), 0, "a destroyed assault transport contributes none")
+	assert_eq(WolfLaneLayout.badge_boarding_parties(_wolf("w", "cruiser", "aegis")), 0, "not an assault transport")
 
-func test_ability_label_full_per_hull() -> void:
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "battlestation", "aegis")), "SIEGE BATTERY", "battlestation should always read SIEGE BATTERY")
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "strikecarrier", "aegis")), "STOPS FW BUFF", "strikecarrier should always read STOPS FW BUFF")
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "assault_transport", "aegis", false, {"boarders": 4})), "PREVENTS 4 BP", "assault transport should read its boarders count")
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "cruiser", "aegis", false, {"prevents": 2})), "PREVENTS 2", "cruiser should read its phase-derived prevents number")
+func test_badge_fw_buff_only_for_live_strikecarrier_and_reflects_the_live_count() -> void:
+	assert_eq(WolfLaneLayout.badge_fw_buff(_wolf("w", "strikecarrier", "aegis"), 3), 3, "shows the current live fighter wing count")
+	assert_eq(WolfLaneLayout.badge_fw_buff(_wolf("w", "strikecarrier", "aegis"), 0), 0, "zero live fighter wings means no buff to show")
+	assert_eq(WolfLaneLayout.badge_fw_buff(_wolf("w", "strikecarrier", "aegis", true), 3), 0, "a destroyed strikecarrier is not buffing anything")
+	assert_eq(WolfLaneLayout.badge_fw_buff(_wolf("w", "cruiser", "aegis"), 3), 0, "not a strikecarrier")
 
-func test_ability_label_full_immune_takes_priority_over_hull_text() -> void:
-	assert_eq(WolfLaneLayout.ability_label_full(_wolf("w", "battlestation", "aegis", false, {"immune_this_phase": true})), "IMMUNE", "immune_this_phase should override the hull's normal ability text")
-
-func test_ability_abbrev_matches_the_full_label_meaning() -> void:
-	assert_eq(WolfLaneLayout.ability_abbrev(_wolf("w", "battlestation", "aegis", true)), "DEAD", "destroyed compact abbreviation should be DEAD")
-	assert_eq(WolfLaneLayout.ability_abbrev(_wolf("w", "battlestation", "aegis")), "SIEGE", "battlestation abbreviation should be SIEGE")
-	assert_eq(WolfLaneLayout.ability_abbrev(_wolf("w", "strikecarrier", "aegis")), "FW+", "strikecarrier abbreviation should be FW+")
-	assert_eq(WolfLaneLayout.ability_abbrev(_wolf("w", "assault_transport", "aegis", false, {"boarders": 4})), "4BP", "assault transport abbreviation should show its boarders count")
-	assert_eq(WolfLaneLayout.ability_abbrev(_wolf("w", "cruiser", "aegis", false, {"prevents": 2})), "P2", "cruiser abbreviation should show its phase-derived prevents number")
+func test_badge_cannot_be_damaged_at_short_only_for_live_battlestation() -> void:
+	assert_true(WolfLaneLayout.badge_cannot_be_damaged_at_short(_wolf("w", "battlestation", "aegis")), "battlestation cannot be damaged at short")
+	assert_true(not WolfLaneLayout.badge_cannot_be_damaged_at_short(_wolf("w", "battlestation", "aegis", true)), "already destroyed - the badge no longer applies")
+	assert_true(not WolfLaneLayout.badge_cannot_be_damaged_at_short(_wolf("w", "cruiser", "aegis")), "not a battlestation")
 
 func test_sort_fleet_ships_by_targeting_order_fixes_shepherd_quellon_swap() -> void:
 	# Regression guard for the exact bug reported from real use: lanes
@@ -194,3 +224,40 @@ func test_sort_fleet_ships_by_targeting_order_fixes_shepherd_quellon_swap() -> v
 	var sorted := WolfLaneLayout.sort_fleet_ships_by_targeting_order(fleet_ships)
 	var ids: Array = sorted.map(func(f: Dictionary): return f["id"])
 	assert_eq(ids, ["aegis", "dione", "icebreaker", "quellon", "shepherd", "refinery_124"], "lane order must follow the Wolf Attack Sheet's targeting-die order, not ShipRegistry's display order")
+
+func test_ladder_cell_values_matches_the_printed_cards() -> void:
+	assert_eq(WolfLaneLayout.ladder_cell_values(_wolf("w", "cruiser", "aegis"), 0), [0, 1, 2, 3], "cruiser: rising shape")
+	assert_eq(WolfLaneLayout.ladder_cell_values(_wolf("w", "battlestation", "aegis"), 0), [3, 3, null, 3], "battlestation: null (not 0) at short")
+
+func test_ladder_cell_values_survives_cell_reflects_live_strikecarrier_count() -> void:
+	assert_eq(WolfLaneLayout.ladder_cell_values(_wolf("w", "fighter_wing", "aegis"), 0)[3], 1, "no live strikecarrier: base value")
+	assert_eq(WolfLaneLayout.ladder_cell_values(_wolf("w", "fighter_wing", "aegis"), 2)[3], 3, "two live strikecarriers: +2 bonus")
+	assert_eq(WolfLaneLayout.ladder_cell_values(_wolf("w", "strikecarrier", "aegis"), 5)[3], 2, "a strikecarrier's own survives cell never changes")
+
+func test_current_cell_index_matches_the_active_range_phase() -> void:
+	assert_eq(WolfLaneLayout.current_cell_index("targeting"), -1, "nothing committed yet during targeting")
+	assert_eq(WolfLaneLayout.current_cell_index("range_long"), 0, "long range is index 0")
+	assert_eq(WolfLaneLayout.current_cell_index("range_medium"), 1, "medium range is index 1")
+	assert_eq(WolfLaneLayout.current_cell_index("range_short"), 2, "short range is index 2")
+	assert_eq(WolfLaneLayout.current_cell_index("boarding"), -1, "not a range phase")
+
+func test_ladder_cell_states_during_targeting_nothing_is_boxed() -> void:
+	var states := WolfLaneLayout.ladder_cell_states(_wolf("w", "cruiser", "aegis"), "targeting")
+	assert_eq(states, [WolfLaneLayout.CellState.FUTURE, WolfLaneLayout.CellState.FUTURE, WolfLaneLayout.CellState.FUTURE, WolfLaneLayout.CellState.SURVIVES_LIVE], "no cell should be boxed as current during targeting")
+
+func test_ladder_cell_states_at_medium_boxes_the_current_cell() -> void:
+	var states := WolfLaneLayout.ladder_cell_states(_wolf("w", "cruiser", "aegis"), "range_medium")
+	assert_eq(states[0], WolfLaneLayout.CellState.PASSED, "long has passed")
+	assert_eq(states[1], WolfLaneLayout.CellState.CURRENT, "medium is current")
+	assert_eq(states[2], WolfLaneLayout.CellState.FUTURE, "short hasn't happened yet")
+	assert_eq(states[3], WolfLaneLayout.CellState.SURVIVES_LIVE, "survives stays live-coloured while the wolf is alive")
+
+func test_ladder_cell_states_destroyed_shows_the_realised_cell() -> void:
+	var wolf := _wolf("w", "cruiser", "aegis", true, {"destroyed_at_phase": 1})
+	var states := WolfLaneLayout.ladder_cell_states(wolf, "range_short")
+	assert_eq(states, [WolfLaneLayout.CellState.GHOSTED, WolfLaneLayout.CellState.REALISED, WolfLaneLayout.CellState.GHOSTED, WolfLaneLayout.CellState.SURVIVES_GHOSTED], "the phase it actually died in is realised, everything else (including survives, which didn't happen) is ghosted - regardless of what phase is current now")
+
+func test_ladder_cell_states_destroyed_outside_a_range_phase_ghosts_everything() -> void:
+	var wolf := _wolf("w", "cruiser", "aegis", true)  # destroyed_at_phase defaults to -1
+	var states := WolfLaneLayout.ladder_cell_states(wolf, "range_short")
+	assert_eq(states, [WolfLaneLayout.CellState.GHOSTED, WolfLaneLayout.CellState.GHOSTED, WolfLaneLayout.CellState.GHOSTED, WolfLaneLayout.CellState.SURVIVES_GHOSTED], "no specific cell to realise - a rare host-override edge case, stay safe rather than boxing the wrong thing")
