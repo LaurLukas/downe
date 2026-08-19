@@ -64,13 +64,19 @@ const EDGES: Dictionary[String, Array] = {
 
 ## chart letter ("A", "B", "C") -> {coordinate -> system letter}.
 ## "0000" is always the start, listed here as "START" for completeness.
+##
+## Chart A's "1964" entry was originally transcribed as "P" (a
+## duplicate - "4888" is also "P" on chart A), which put chart A at 3 M
+## and 2 P against docs/star_charts.json's variant_summary of 4 L/4 M/
+## one each of N,O,P. Corrected to "M" per that JSON's cross-check;
+## every other node on every other chart already matched it exactly.
 const CHART_ASSIGNMENTS: Dictionary[String, Dictionary] = {
 	"A": {
 		"0000": "START",
 		"5143": "L", "1413": "A", "9997": "C", "6837": "D", "0488": "L",
 		"6931": "L", "4454": "M", "4753": "E", "1096": "I", "6964": "G",
 		"2580": "F", "3068": "M", "0853": "L", "6943": "K",
-		"6798": "N", "8378": "J", "1964": "P",
+		"6798": "N", "8378": "J", "1964": "M",
 		"1380": "M", "1836": "H", "0408": "O", "4888": "P",
 	},
 	"B": {

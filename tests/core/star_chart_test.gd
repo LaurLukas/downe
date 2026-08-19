@@ -92,3 +92,23 @@ func test_pursuit_reduction_for_start_is_zero() -> void:
 func test_pursuit_reduction_matches_band() -> void:
 	assert_eq(StarChart.pursuit_reduction_at("5143"), -1, "5143 is in the -1 band")
 	assert_eq(StarChart.pursuit_reduction_at("4888"), -7, "4888 is in the -7 band")
+
+## Regression guard for a real transcription bug: chart A's "1964" was
+## originally "P" (a duplicate of "4888"), giving chart A only 3 M's and
+## 2 P's. docs/star_charts.json's variant_summary confirms the correct
+## tally per chart - catching a repeat of that class of error, which the
+## symmetry/connectivity tests above can't (they check graph structure,
+## not per-chart letter counts).
+func test_chart_letter_tallies_match_variant_summary() -> void:
+	var expected := {
+		"A": {"L": 4, "M": 4, "N": 1, "O": 1, "P": 1},
+		"B": {"L": 5, "M": 5, "N": 1, "O": 1, "P": 1},
+		"C": {"L": 4, "M": 5, "N": 1, "O": 1, "P": 1},
+	}
+	for chart: String in expected:
+		var counts: Dictionary = {}
+		for coordinate: String in StarChart.PURSUIT_BAND:
+			var letter := StarChart.system_letter_at(chart, coordinate)
+			counts[letter] = counts.get(letter, 0) + 1
+		for letter: String in expected[chart]:
+			assert_eq(counts.get(letter, 0), expected[chart][letter], "chart %s should have %d of letter %s, got %d" % [chart, expected[chart][letter], letter, counts.get(letter, 0)])
