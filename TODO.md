@@ -1903,14 +1903,49 @@ The full headless `core/map/` layer is built and tested (see below) -
 `reveal_state.gd`, plus the split-fleet pursuit model and the two
 blockers under "Blockers" further down. The TV screen itself
 (`ui/tv/star_map/`) is built too, structural pass, reachable via one
-`HostConsole` button - see that entry below for what's still deferred
-(visual polish, the richer auto-show/idle timing policy). The admin
+`HostConsole` button plus the §8 auto-show timing below. The admin
 console is built as well, as a new `HostConsole` section rather than the
 spec's proposed standalone `ui/admin/StarMapAdmin.tscn` - see that
 entry's own note on why. What's left is genuinely minor: scout-range/
-jump-range overlays (need state nothing tracks yet), the §8 auto-show/
-idle timing policy, and `res://data/star_charts.json` as an actual
-runtime data file (still just living as reference docs).
+jump-range overlays (need state nothing tracks yet), visual polish, and
+`res://data/star_charts.json` as an actual runtime data file (still just
+living as reference docs).
+
+**§8 show/hide timing - built, with one piece deliberately left open.**
+`ui/main.gd` now starts (and restarts, so back-to-back jumps don't let
+the map drop between them) a 45s one-shot `Timer` on every
+`FleetPositions.changed`, forcing `StarMapScreen` visible for that
+window regardless of the manual toggle - covers §8's "Automatically for
+45s after every jump resolution." This codebase has no separate "jump
+resolution" event to hook (`JumpResolver` isn't wired into any UI at
+all, still true per the note further down this file) - `FleetPositions.
+changed` is the closest real signal, since recording a unit's actual
+arrival via the admin console's Move control *is* how a jump gets
+recorded here. Wolf Attack still wins over everything, including an
+open auto-show window (verified: starting an attack mid-window hides the
+map, ending the attack while the window would still be open brings it
+straight back, matching "the attack screen has absolute priority").
+§8's "on demand during the Coordination Phase" is just the existing
+manual toggle - nothing further needed.
+
+**Deliberately not built**: §8's "idle screen between phases, at 60%
+brightness" - genuinely skipped, not overlooked. That line only makes
+sense if `StarMapScreen` is the TV's *default* idle screen, and in this
+app `TVDisplay` already holds that role (fleet status + announcements) -
+swapping the default out is a real product decision with a real user
+(the host relies on that screen), not something to guess while "just
+wiring." Flagging it here rather than picking one silently.
+
+Verified with a throwaway driving script that booted the real `Main`
+scene (not just calling `core/` methods): confirmed the default is
+`TVDisplay`; a `move_unit()` call flips it to `StarMapScreen` and starts
+the timer; stopping the timer (standing in for the real 45s elapsing,
+without an automated test actually waiting that long) reverts to
+`TVDisplay`; the manual toggle still works independently; starting a
+Wolf Attack mid-auto-show-window hides the map in favor of
+`WolfAttackDisplay`; ending that attack while the window would still be
+open brings the map straight back. Full test suite still green (43
+files - no `core/` changes this pass, pure `ui/main.gd` wiring).
 
 ### Overlap with existing code — reconcile before building
 
@@ -2175,12 +2210,10 @@ bug can't recur silently. Full suite still green (39 files).
       pattern to three screens: `WolfAttackDisplay` still has absolute
       priority the instant an attack starts (constraint 3 / spec §8's
       "never during a Wolf Attack"); otherwise the toggle picks
-      `TVDisplay` or `StarMapScreen`. **Not built**: the richer §8 show/
-      hide policy (auto-show for 45s after a jump resolution, idle at
-      60% brightness between phases) - that needs turn/jump-event timing
-      nothing tracks yet and is a real separate piece of work, not
-      something to fake with a `Timer` node guessing at the right
-      trigger.
+      `TVDisplay` or `StarMapScreen`. The richer §8 show/hide policy
+      (auto-show for 45s after a jump, idle at 60% brightness) was built
+      in a follow-up pass - see the "§8 show/hide timing" writeup near
+      the top of this section.
 
       Verified against the real running app three ways: a throwaway
       driving script (deliberately not committed, same pattern as every

@@ -24,12 +24,28 @@ var _player_peer_ids: Dictionary[String, int] = {}
 
 ## Which of TVDisplay/StarMapScreen is up when no Wolf Attack is active
 ## - toggled from HostConsole's "Show Star Map" button
-## (star_map_toggle_pressed). docs/star_map_tv_display.md §8 specs a
-## richer policy (auto-show for 45s after a jump, idle at 60%
-## brightness between phases) that isn't built yet - this is just the
-## on-demand host toggle, the minimum needed to actually reach the
-## screen. See TODO.md.
+## (star_map_toggle_pressed), or forced on for STAR_MAP_AUTO_SHOW_SECONDS
+## after a unit actually moves (see _star_map_auto_show_timer below).
+## docs/star_map_tv_display.md §8's "on demand during the Coordination
+## Phase" line is just this same toggle - a host action, nothing further
+## to build. Its "idle screen between phases, at 60% brightness" line is
+## NOT built: that only makes sense if StarMapScreen is the *default*
+## idle screen, and in this app TVDisplay already holds that role
+## (fleet status + announcements) - swapping the default out is a real
+## product decision, not something to sneak in while "just wiring", so
+## it's left as an open question in TODO.md rather than guessed here.
 var _show_star_map := false
+
+## §8: "Automatically for 45s after every jump resolution." This
+## codebase has no separate "jump resolution" event yet - JumpResolver
+## isn't wired into any UI (see TODO.md) - so FleetPositions.changed is
+## the closest real signal: it fires when the host records a unit
+## actually arriving somewhere via the admin console's Move control,
+## which today *is* how a jump gets recorded. Restarted, not just
+## started, on every move, so back-to-back jumps keep the map up rather
+## than letting it drop between them.
+const STAR_MAP_AUTO_SHOW_SECONDS := 45.0
+var _star_map_auto_show_timer: Timer
 
 var _tv_display: Control
 var _wolf_attack_display: Control
@@ -117,17 +133,43 @@ func _ready() -> void:
 	# Toggled via visible, not swapped in/out of the tree, so scroll/draw
 	# state in any of them survives a host flipping back and forth.
 	game_state.mutated.connect(_update_tv_visibility)
+
+	_star_map_auto_show_timer = Timer.new()
+	_star_map_auto_show_timer.one_shot = true
+	_star_map_auto_show_timer.wait_time = STAR_MAP_AUTO_SHOW_SECONDS
+	add_child(_star_map_auto_show_timer)
+	# timeout drops the map back to whatever the manual toggle alone
+	# would show; connected directly (not via `mutated`, which
+	# FleetPositions.changed already bubbles into) so the auto-show
+	# window is guaranteed to actually be running before this same
+	# handler re-evaluates visibility - see _on_fleet_positions_changed.
+	_star_map_auto_show_timer.timeout.connect(_update_tv_visibility)
+	game_state.fleet_positions.changed.connect(_on_fleet_positions_changed)
+
 	_update_tv_visibility()
 
 func _on_star_map_toggle_pressed() -> void:
 	_show_star_map = not _show_star_map
 	_update_tv_visibility()
 
+## Starting the timer here, in a handler on FleetPositions.changed
+## itself, rather than relying on GameState's own fleet_positions.changed
+## -> mutated bubbling (which _update_tv_visibility is also connected
+## to) matters: GameState wires that bubble before Main ever runs, so if
+## this only listened to `mutated`, _update_tv_visibility would run
+## *before* the timer had been (re)started on the very move that should
+## trigger it, showing stale visibility for one mutation.
+func _on_fleet_positions_changed() -> void:
+	_star_map_auto_show_timer.start(STAR_MAP_AUTO_SHOW_SECONDS)
+	_update_tv_visibility()
+
 func _update_tv_visibility() -> void:
 	var attack_active := game_state.wolf_attack != null
+	var auto_show_active := not _star_map_auto_show_timer.is_stopped()
+	var show_star_map := _show_star_map or auto_show_active
 	_wolf_attack_display.visible = attack_active
-	_star_map_screen.visible = not attack_active and _show_star_map
-	_tv_display.visible = not attack_active and not _show_star_map
+	_star_map_screen.visible = not attack_active and show_star_map
+	_tv_display.visible = not attack_active and not show_star_map
 
 ## "identify_player" is transport bookkeeping (which socket belongs to
 ## which player), not a GameState mutation, so it's handled here rather
