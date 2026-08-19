@@ -1913,28 +1913,28 @@ the spec's file layout would duplicate this - extend the existing file (and
 decide whether it physically moves under `core/map/` to match the spec's
 layout) rather than writing a new one from scratch.
 
-**A real bug, found by cross-checking `docs/star_charts.json` against the
-existing, already-shipped, already symmetry-tested `core/star_chart.gd`**:
-`CHART_ASSIGNMENTS["A"]["1964"]` is `"P"` - it should be `"M"`. Chart A's
-own letter tally in the existing file currently has two `P`s (`1964` and
+**[x] A real bug, found by cross-checking `docs/star_charts.json` against
+the existing, already-shipped, already symmetry-tested
+`core/star_chart.gd`, fixed with the user's confirmation**:
+`CHART_ASSIGNMENTS["A"]["1964"]` was `"P"` - it should have been `"M"`.
+Chart A's own letter tally in the existing file had two `P`s (`1964` and
 `4888`) and only three `M`s, but `docs/star_charts.json`'s
 `variant_summary.A` says chart A has exactly 8 wolf systems (4 L + 4 M) and
 exactly one each of N/O/P (P at `4888` only) - and every other node's
-letter, on every other node across all three charts, matches exactly
-between the two sources. Changing `1964` from `P` to `M` makes chart A's
-tally match the JSON's variant summary precisely. The existing
-`tests/core/star_chart_test.gd` symmetry test wouldn't have caught this -
-it checks graph symmetry, not per-chart letter-count invariants. Worth
-fixing directly and adding a letter-tally-per-variant test so this class of
-bug can't recur silently. Not fixed here since it's game content, not
-plumbing - flagging for confirmation rather than guessing, per this
-project's own established pattern for anything touching printed source
-material.
+letter, on every other node across all three charts, matched exactly
+between the two sources. Now `1964` reads `M`, matching the JSON's variant
+summary precisely. The existing `tests/core/star_chart_test.gd` symmetry
+test wouldn't have caught this - it checks graph symmetry, not per-chart
+letter-count invariants - so a new `test_chart_letter_tallies_match_
+variant_summary` was added alongside it, asserting the full L/M/N/O/P
+tally for all three charts against the JSON's numbers, so this class of
+bug can't recur silently. Full suite still green (39 files).
 
 ### What's needed to build the spec
 
-- [ ] Reconcile/extend `core/star_chart.gd` per the bug and layout note
-      above.
+- [~] Reconcile/extend `core/star_chart.gd` - the letter bug above is
+      fixed; still open whether the file physically moves under
+      `core/map/` to match the spec's layout.
 - [ ] `core/map/fleet_positions.gd` — genuinely new. Nothing in `core/`
       today tracks which chart node a ship is actually at, or its move
       history. `Ship.jump_coordinates` (`core/ship.gd`) is free text typed
@@ -1997,21 +1997,30 @@ material.
 
 ### Blockers — resolve before implementing trails (spec's own §10, items 1-3)
 
-1. Short/medium/long jump = hop count on the chart - **already resolved**
-   per the spec itself (§6.7), and already consistent with `core/`'s
-   existing `PURSUIT_BAND` cumulative-per-tier data (see the -1..-7 table
-   above) even though nothing wires that data up yet.
-2. **Does pursuit fall by 1 per jump, or by 1 per tier crossed?** The
-   spec calls this its top blocker. Worth knowing: `core/star_chart.gd`'s
-   existing `PURSUIT_BAND` already encodes the "cumulative running total"
-   answer (-1 through -7 by tier depth, matching the printed band labels)
-   - but `JumpResolver.resolve()` never reads it, it just calls
-   `pursuit_track.fall()` with a flat default of `1` regardless of
-   distance. So the data already assumes the reading the spec is asking
-   about; the resolver simply doesn't use it yet. Confirm the reading,
-   then wire `JumpResolver` to `StarChart.pursuit_reduction_at()` instead
-   of a flat `fall()` - this is arithmetic the engine should already be
-   doing and currently isn't.
+1. [x] Short/medium/long jump = hop count on the chart - **already
+   resolved** per the spec itself (§6.7), and already consistent with
+   `core/`'s existing `PURSUIT_BAND` cumulative-per-tier data (see the
+   -1..-7 table above).
+2. [x] **Does pursuit fall by 1 per jump, or by 1 per tier crossed?
+   Confirmed with the user: cumulative per tier** (a jump to a tier-4
+   destination falls pursuit by the full -4, matching the printed band
+   labels - not a flat -1 regardless of distance). Wired into
+   `core/jump.gd`: `JumpResolver.resolve()` no longer takes a
+   `moves_away_from_wolves` bool with a hardcoded flat amount - it now
+   takes a signed `pursuit_delta` the *caller* supplies. Deliberately
+   not derived inside `JumpResolver` from `ship.jump_coordinates` -
+   doing that would mean the engine looking up the scout's typed text
+   against `StarChart` to compute a magnitude, which is exactly the
+   auto-verification constraint 1 forbids (this file's own "Star
+   systems" section already flagged this risk before the fix landed).
+   The host adjudicates where a ship actually went and calls
+   `StarChart.pursuit_reduction_at()` themselves to get the magnitude -
+   `test_resolve_falls_pursuit_track_by_the_full_cumulative_tier_
+   magnitude` in `tests/core/jump_test.gd` covers exactly this path.
+   **Still open**: no UI calls `JumpResolver.resolve()` yet at all (confirmed via
+   grep - it's only ever invoked from tests) - the host-adjudication
+   control that supplies `pursuit_delta` doesn't exist, whether in the
+   admin console being planned above or elsewhere.
 3. **Pursuit reconciliation on group merge** — spec's own answer is a
    host prompt (safe default). Needs the split-fleet pursuit model above
    to exist first; not otherwise blocking.
