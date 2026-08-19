@@ -82,8 +82,24 @@ func test_group_representative_has_colour_and_abbreviation() -> void:
 	assert_eq(groups.size(), 1, "should start as one group")
 	var representative: Dictionary = groups[0]["representative"]
 	assert_eq(representative["abbr"], "AEG", "AEGIS's abbreviation should be AEG")
+	assert_eq(representative["id"], "aegis", "representative should carry the raw unit id, not just display fields, for admin controls to act on")
 	assert_true(String(representative["colour"]).begins_with("#"), "colour should be a hex string")
 	assert_true(bool(representative["is_aegis"]), "the initial group's representative is AEGIS")
+
+func test_ground_truth_reveals_every_node_regardless_of_visited_state() -> void:
+	var positions := FleetPositions.new() # fleet never moves - only 0000 is visited
+	var reveal := RevealState.new()
+	var projection := StarMapProjection.build_ground_truth("A", 1, positions, reveal)
+	var nodes: Array = projection["nodes"]
+	var with_letter: Array = nodes.filter(func(n: Dictionary) -> bool: return n.has("letter"))
+	assert_eq(with_letter.size(), 22, "ground truth should reveal every node's letter, visited or not")
+
+func test_ground_truth_group_includes_raw_member_ids() -> void:
+	var positions := FleetPositions.new()
+	var reveal := RevealState.new()
+	var projection := StarMapProjection.build_ground_truth("A", 1, positions, reveal)
+	var group: Dictionary = (projection["groups"] as Array)[0]
+	assert_true("aegis" in (group["member_ids"] as Array), "member_ids should carry raw unit ids for admin controls to act on")
 
 func test_projection_includes_a_path_tree() -> void:
 	var positions := FleetPositions.new()

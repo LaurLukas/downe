@@ -1888,7 +1888,7 @@ ladder's cell row will need the same "measure the real font metric,
 don't guess a fixed height" treatment `_build_full_token()` now uses,
 given it's replacing the exact row that bug came from).
 
-## In progress — Star Map TV display (core/map/ + TV screen done, admin console not started)
+## Mostly done — Star Map TV display (core/map/, TV screen, and admin console built)
 
 Two docs landed for this: `docs/star_map_tv_display.md` (the full spec -
 purpose, hard constraints, layout, rendering layers, data contract, host
@@ -1902,11 +1902,15 @@ The full headless `core/map/` layer is built and tested (see below) -
 `fleet_positions.gd`, `path_tree.gd`, `star_map_projection.gd`,
 `reveal_state.gd`, plus the split-fleet pursuit model and the two
 blockers under "Blockers" further down. The TV screen itself
-(`ui/tv/star_map/`) is built too, structural pass, reachable via one new
+(`ui/tv/star_map/`) is built too, structural pass, reachable via one
 `HostConsole` button - see that entry below for what's still deferred
-(visual polish, the richer auto-show/idle timing policy). Nothing under
-`ui/admin/` exists yet - the actual host controls (move unit, claims,
-representative, etc.) are the real remaining work.
+(visual polish, the richer auto-show/idle timing policy). The admin
+console is built as well, as a new `HostConsole` section rather than the
+spec's proposed standalone `ui/admin/StarMapAdmin.tscn` - see that
+entry's own note on why. What's left is genuinely minor: scout-range/
+jump-range overlays (need state nothing tracks yet), the §8 auto-show/
+idle timing policy, and `res://data/star_charts.json` as an actual
+runtime data file (still just living as reference docs).
 
 ### Overlap with existing code — reconcile before building
 
@@ -2201,17 +2205,75 @@ bug can't recur silently. Full suite still green (39 files).
       `star_chart_test.gd` for `NODE_POSITION`; no new test files, since
       `ui/` scenes aren't unit-tested in this project's suite - same
       reason `HostConsole`'s own panels have no test file either).
-- [ ] `ui/admin/StarMapAdmin.tscn/.gd` — ground-truth map + every host
-      control from §8 (move unit, undo, publish/retract claim, set group
-      label/pursuit/representative, toggle scout ring/jump range, set
-      destination, show/hide, force state). New - this is where CLAUDE.md
-      constraint 5 (host can override everything) actually lives for this
-      screen. Every setter this needs already exists on `FleetPositions`/
-      `RevealState` - this is now "just" wiring a UI to calls that already
-      work, the same relationship `HostConsole`'s ship panels have to
-      `Ship`'s setters. `HostConsole`'s new "Show Star Map" button (above)
-      covers only the "show/hide" line of §8's control table - the other
-      nine rows are still unbuilt.
+- [x] **Admin console - built as a new `HostConsole` section, not a
+      separate `ui/admin/StarMapAdmin.tscn`.** Every other admin feature
+      in this project (Wolf Attack control, Players, ship/craft panels)
+      is already a section inside the single `HostConsole` scene, not
+      its own top-level window - the spec's own reasoning for keeping
+      this off the TV ("a scene that is explicitly not the TV scene and
+      never routed to the second monitor") is satisfied by that just as
+      well as a standalone scene would, so a new `StarMapSection` inside
+      `host_console.gd`/`.tscn` matches the codebase's actual convention
+      instead of introducing a second admin-UI pattern.
+
+      **`core/map/star_map_projection.gd` gained `build_ground_truth()`**
+      - a second entrypoint (not a flag on `build()`) that always
+      attaches every node's letter/name/class/consequence regardless of
+      visited state. Deliberately kept as a separate function rather than
+      a parameter: the TV/network path only ever calls `build()`, so
+      there's no flag anywhere in that call chain that could accidentally
+      get flipped to ground truth - the redacted path is structurally
+      unable to reach the unredacted one. `_build_group()` also gained
+      `member_ids` (raw unit ids) and `representative.id`, needed for the
+      admin console's dropdowns to actually call
+      `set_group_representative()` - not secret (capital ship names are
+      public), just previously-unneeded plumbing. 2 new tests.
+
+      **Covers every §8 row that has real state to control**: chart in
+      play (A/B/C), move unit + undo last move (adjacency not enforced,
+      per spec), publish/retract claim, set group label/pursuit/
+      representative (locked to AEGIS for AEGIS's group, per §4.1),
+      merge-pursuit reconciliation (shows the absorbed value(s), lets the
+      host pick the resolved number - "do not auto-resolve"), force node
+      state, clear override. Reuses `StarMapCanvas` directly (the same
+      TV-screen drawing code, just fed `build_ground_truth()`'s dict
+      instead of the redacted one) for a visual ground-truth map inside
+      the console, plus letter-annotated coordinate dropdowns built from
+      the same ground-truth view.
+
+      **Not built** (§8's remaining two rows): "Toggle scout ring" /
+      "Toggle jump range" - both need scout-range/jump-range overlay
+      state that doesn't exist anywhere in `core/` yet, the same gap
+      `StarMapProjection`'s own header comment already flags for
+      `scout_rings`/`jump_ranges`. Nothing here can toggle a state that
+      isn't tracked; the earlier "Show Star Map" toggle button already
+      covers the show/hide row.
+
+      **Rebuild policy**: the whole section rebuilds unconditionally on
+      every `GameState.mutated` (`CONNECT_DEFERRED`, same "a button
+      inside the freed subtree triggered the mutation" crash the Wolf
+      Attack section already solved this way) rather than the ship/craft
+      panels' refresh-on-expand pattern - matches Wolf Attack's own
+      precedent for a control surface that's taps/dropdowns/short entries
+      rather than a 180-field surface where a background mutation
+      mid-edit would be costly.
+
+      Verified with a throwaway driving script against the real
+      `HostConsole` scene (not just calling `core/` setters directly):
+      selected Icebreaker and a target coordinate in the built Move
+      controls and pressed Move, confirmed `FleetPositions.positions`
+      and the group count updated and the section rebuilt with the new
+      group; published a claim through the built Publish Claim row on
+      the coordinate for chart A's true `M`, confirmed it landed in
+      `RevealState`; pressed the resulting claim's own Retract button
+      and confirmed it cleared; changed the Chart in play dropdown and
+      confirmed `GameState.chart_in_play` updated. One real bug caught
+      this way and fixed before it shipped: a copy-paste edit had
+      dropped `_build_resolution_section()`'s own `return section` line
+      (a genuine "not all code paths return a value" parse error) and
+      left a stray orphaned `return section` at the very end of the
+      file - the driving script wouldn't even load the scene until both
+      were fixed. Full test suite still green (43 files).
 - [ ] `res://data/star_charts.json` — copy/adapt `docs/star_charts.json`
       into the runtime data path the spec's §9 file layout expects.
       Existing `core/` precedent (`star_chart.gd`, `craft_definitions.gd`,

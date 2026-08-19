@@ -39,6 +39,7 @@ signal star_map_toggle_pressed()
 @onready var _new_player_name: LineEdit = %NewPlayerName
 @onready var _add_player_button: Button = %AddPlayerButton
 @onready var _wolf_attack_section: VBoxContainer = %WolfAttackSection
+@onready var _star_map_section: VBoxContainer = %StarMapSection
 
 var game_state: GameState
 var _all_refreshers: Array[Callable] = []
@@ -77,12 +78,21 @@ func set_game_state(state: GameState) -> void:
 	# freed"). Deferring runs the rebuild after that call stack has
 	# fully unwound instead.
 	game_state.mutated.connect(_rebuild_wolf_attack_section, CONNECT_DEFERRED)
+	# Same CONNECT_DEFERRED reasoning as the Wolf Attack section above -
+	# the section rebuilds unconditionally on every mutation (it's all
+	# taps/dropdowns/short entries, same tradeoff Wolf Attack's section
+	# already makes; unlike the ship/craft panels there's no 180-field
+	# surface here where a background mutation mid-edit would be costly),
+	# and some of its own buttons (Retract, per-group Set) live inside
+	# the very subtree being freed.
+	game_state.mutated.connect(_rebuild_star_map_section, CONNECT_DEFERRED)
 
 	_refresh()
 	_build_ship_panels()
 	_build_craft_panels()
 	_build_player_panels()
 	_rebuild_wolf_attack_section()
+	_rebuild_star_map_section()
 
 func _on_advance_pressed() -> void:
 	game_state.turn_manager.advance()
@@ -721,3 +731,250 @@ func _build_resolution_section(attack: WolfAttack) -> Control:
 	section.add_child(note)
 
 	return section
+
+## --- Star Map -------------------------------------------------------------
+## docs/star_map_tv_display.md §8's admin console - "the same map with
+## ground truth". Uses StarMapProjection.build_ground_truth(), never
+## build() - see that function's own comment on why the two are kept as
+## separate entrypoints rather than one with a flag. This scene is never
+## routed to the TV window or the network, so ground truth here is safe
+## the same way every other host-only field in this console already is.
+##
+## Not built: "Toggle scout ring" / "Toggle jump range" from §8's control
+## table - both need scout-range and jump-range overlay state that
+## doesn't exist anywhere in core/ yet (StarMapProjection's own header
+## comment flags the same gap for scout_rings/jump_ranges). Nothing here
+## can toggle a state that isn't tracked.
+
+const STAR_MAP_STATE_NAMES: Array[String] = ["unknown", "reported", "visited", "occupied", "destination"]
+
+func _rebuild_star_map_section() -> void:
+	for child in _star_map_section.get_children():
+		child.free()
+
+	var throwaway_refreshers: Array[Callable] = []
+	_star_map_section.add_child(_make_option_row(
+		throwaway_refreshers, "Chart in play", ["A", "B", "C"],
+		func() -> int: return maxi(0, ["A", "B", "C"].find(game_state.chart_in_play)),
+		func(index: int) -> void: game_state.set_chart_in_play(["A", "B", "C"][index])
+	))
+
+	var view := StarMapProjection.build_ground_truth(
+		game_state.chart_in_play, game_state.turn_manager.turn_number,
+		game_state.fleet_positions, game_state.reveal_state
+	)
+
+	var canvas_scroll := ScrollContainer.new()
+	canvas_scroll.custom_minimum_size = Vector2(0, 480)
+	var canvas := StarMapCanvas.new()
+	canvas.custom_minimum_size = Vector2(1440, 1050)
+	canvas.view = view
+	canvas_scroll.add_child(canvas)
+	_star_map_section.add_child(canvas_scroll)
+
+	var coordinate_ids: Array[String] = []
+	var coordinate_labels: Array[String] = []
+	for node: Dictionary in (view["nodes"] as Array):
+		var coordinate: String = node["id"]
+		coordinate_ids.append(coordinate)
+		if node.has("letter"):
+			coordinate_labels.append("%s - %s %s" % [coordinate, node["letter"], node["name"]])
+		else:
+			coordinate_labels.append(coordinate)
+
+	var unit_ids := FleetPositions.unit_ids()
+
+	var move_label := Label.new()
+	move_label.text = "Move unit (adjacency not enforced - jump failures/host corrections can go anywhere)"
+	_star_map_section.add_child(move_label)
+
+	var move_row := HBoxContainer.new()
+	var move_unit_option := OptionButton.new()
+	for unit_id: String in unit_ids:
+		move_unit_option.add_item(_star_map_unit_display_name(unit_id))
+	move_row.add_child(move_unit_option)
+	var move_coord_option := OptionButton.new()
+	for label in coordinate_labels:
+		move_coord_option.add_item(label)
+	move_row.add_child(move_coord_option)
+	var move_button := Button.new()
+	move_button.text = "Move"
+	move_button.pressed.connect(func() -> void:
+		game_state.fleet_positions.move_unit(unit_ids[move_unit_option.selected], coordinate_ids[move_coord_option.selected])
+	)
+	move_row.add_child(move_button)
+	var undo_button := Button.new()
+	undo_button.text = "Undo last move"
+	undo_button.pressed.connect(func() -> void:
+		game_state.fleet_positions.undo_last_move(unit_ids[move_unit_option.selected])
+	)
+	move_row.add_child(undo_button)
+	_star_map_section.add_child(move_row)
+
+	var groups_label := Label.new()
+	groups_label.text = "Groups"
+	_star_map_section.add_child(groups_label)
+	for group: Dictionary in (view["groups"] as Array):
+		_star_map_section.add_child(_build_star_map_group_row(group))
+
+	var claim_label := Label.new()
+	claim_label.text = "Publish scout claim (verbatim - never checked against the chart, per CLAUDE.md constraint 1)"
+	_star_map_section.add_child(claim_label)
+
+	var claim_coord_option := OptionButton.new()
+	for label in coordinate_labels:
+		claim_coord_option.add_item(label)
+	var claim_text_edit := LineEdit.new()
+	claim_text_edit.placeholder_text = "Claim text, verbatim"
+	claim_text_edit.custom_minimum_size = Vector2(260, 0)
+	var claim_source_edit := LineEdit.new()
+	claim_source_edit.placeholder_text = "Source (e.g. STARLIGHT)"
+	claim_source_edit.custom_minimum_size = Vector2(160, 0)
+	var claim_row := HBoxContainer.new()
+	claim_row.add_child(claim_coord_option)
+	claim_row.add_child(claim_text_edit)
+	claim_row.add_child(claim_source_edit)
+	var publish_button := Button.new()
+	publish_button.text = "Publish Claim"
+	publish_button.pressed.connect(func() -> void:
+		if claim_text_edit.text.strip_edges().is_empty():
+			return
+		game_state.reveal_state.publish_claim(coordinate_ids[claim_coord_option.selected], claim_text_edit.text, claim_source_edit.text, game_state.turn_manager.turn_number)
+	)
+	claim_row.add_child(publish_button)
+	_star_map_section.add_child(claim_row)
+
+	for coordinate: String in game_state.reveal_state.claims:
+		var claims := game_state.reveal_state.claims_at(coordinate)
+		for i in claims.size():
+			_star_map_section.add_child(_build_star_map_claim_row(coordinate, claims[i], i))
+
+	var force_label := Label.new()
+	force_label.text = "Force node state (escape hatch, constraint 5 - never attaches real letter data on its own)"
+	_star_map_section.add_child(force_label)
+
+	var force_coord_option := OptionButton.new()
+	for label in coordinate_labels:
+		force_coord_option.add_item(label)
+	var force_state_option := OptionButton.new()
+	for state_name in STAR_MAP_STATE_NAMES:
+		force_state_option.add_item(state_name)
+	var force_row := HBoxContainer.new()
+	force_row.add_child(force_coord_option)
+	force_row.add_child(force_state_option)
+	var force_button := Button.new()
+	force_button.text = "Force"
+	force_button.pressed.connect(func() -> void:
+		game_state.reveal_state.set_forced_state(coordinate_ids[force_coord_option.selected], STAR_MAP_STATE_NAMES[force_state_option.selected])
+	)
+	force_row.add_child(force_button)
+	var clear_force_button := Button.new()
+	clear_force_button.text = "Clear override"
+	clear_force_button.pressed.connect(func() -> void:
+		game_state.reveal_state.clear_forced_state(coordinate_ids[force_coord_option.selected])
+	)
+	force_row.add_child(clear_force_button)
+	_star_map_section.add_child(force_row)
+
+	if not game_state.reveal_state.forced_states.is_empty():
+		var overrides_parts: Array[String] = []
+		for coordinate: String in game_state.reveal_state.forced_states:
+			overrides_parts.append("%s=%s" % [coordinate, game_state.reveal_state.forced_states[coordinate]])
+		var overrides_label := Label.new()
+		overrides_label.text = "Active overrides: %s" % ", ".join(overrides_parts)
+		_star_map_section.add_child(overrides_label)
+
+static func _star_map_unit_display_name(unit_id: String) -> String:
+	if unit_id == "voyage_33_0":
+		return "G.I.V. Voyage 33-0"
+	return ShipRegistry.display_name(unit_id)
+
+func _build_star_map_group_row(group: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	var group_id: String = group["id"]
+	var representative: Dictionary = group["representative"]
+
+	var header := Label.new()
+	header.text = "%d. %s   at %s   pursuit %d   [%s]" % [
+		int(group["index"]), String(group["label"]), String(group["at"]),
+		int(group["pursuit"]), ", ".join(group["members"] as Array),
+	]
+	box.add_child(header)
+
+	var label_row := HBoxContainer.new()
+	var label_edit := LineEdit.new()
+	label_edit.text = String(group["label"])
+	label_edit.custom_minimum_size = Vector2(200, 0)
+	label_row.add_child(label_edit)
+	var label_button := Button.new()
+	label_button.text = "Set label"
+	label_button.pressed.connect(func() -> void: game_state.fleet_positions.set_group_label(group_id, label_edit.text))
+	label_row.add_child(label_button)
+	box.add_child(label_row)
+
+	var pursuit_row := HBoxContainer.new()
+	var pursuit_spin := SpinBox.new()
+	pursuit_spin.min_value = PursuitTrack.MIN_VALUE
+	pursuit_spin.max_value = PursuitTrack.MAX_VALUE
+	pursuit_spin.value = int(group["pursuit"])
+	pursuit_row.add_child(pursuit_spin)
+	var pursuit_button := Button.new()
+	pursuit_button.text = "Set pursuit"
+	pursuit_button.pressed.connect(func() -> void: game_state.fleet_positions.set_group_pursuit(group_id, int(pursuit_spin.value)))
+	pursuit_row.add_child(pursuit_button)
+	box.add_child(pursuit_row)
+
+	var member_ids: Array = group["member_ids"]
+	if member_ids.size() > 1:
+		var is_aegis_group: bool = bool(representative["is_aegis"])
+		var rep_row := HBoxContainer.new()
+		var rep_option := OptionButton.new()
+		for i in member_ids.size():
+			var unit_id: String = member_ids[i]
+			rep_option.add_item(_star_map_unit_display_name(unit_id))
+			if unit_id == String(representative["id"]):
+				rep_option.selected = i
+		rep_option.disabled = is_aegis_group
+		rep_row.add_child(rep_option)
+		var rep_button := Button.new()
+		rep_button.text = "Set representative"
+		rep_button.disabled = is_aegis_group
+		rep_button.pressed.connect(func() -> void: game_state.fleet_positions.set_group_representative(group_id, member_ids[rep_option.selected]))
+		rep_row.add_child(rep_button)
+		if is_aegis_group:
+			var locked_label := Label.new()
+			locked_label.text = "(locked to AEGIS - §4.1, no exception)"
+			rep_row.add_child(locked_label)
+		box.add_child(rep_row)
+
+	var pending: Array = group["pending_merge_pursuits"]
+	if not pending.is_empty():
+		var pending_row := HBoxContainer.new()
+		var pending_label := Label.new()
+		var pending_text := ", ".join(pending.map(func(v: Variant) -> String: return str(v)))
+		pending_label.text = "MERGE PENDING - absorbed pursuit value(s) %s - reconcile to:" % pending_text
+		pending_row.add_child(pending_label)
+		var reconcile_spin := SpinBox.new()
+		reconcile_spin.min_value = PursuitTrack.MIN_VALUE
+		reconcile_spin.max_value = PursuitTrack.MAX_VALUE
+		reconcile_spin.value = int(group["pursuit"])
+		pending_row.add_child(reconcile_spin)
+		var reconcile_button := Button.new()
+		reconcile_button.text = "Reconcile"
+		reconcile_button.pressed.connect(func() -> void: game_state.fleet_positions.reconcile_group_pursuit(group_id, int(reconcile_spin.value)))
+		pending_row.add_child(reconcile_button)
+		box.add_child(pending_row)
+
+	box.add_child(HSeparator.new())
+	return box
+
+func _build_star_map_claim_row(coordinate: String, claim: Dictionary, index: int) -> Control:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.text = "%s · T%d · %s: \"%s\"" % [coordinate, int(claim["turn"]), String(claim["source"]), String(claim["text"])]
+	row.add_child(label)
+	var retract_button := Button.new()
+	retract_button.text = "Retract"
+	retract_button.pressed.connect(func() -> void: game_state.reveal_state.retract_claim(coordinate, index))
+	row.add_child(retract_button)
+	return row

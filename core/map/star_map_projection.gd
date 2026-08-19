@@ -15,6 +15,21 @@ extends RefCounted
 ## core/ tracks yet, and are left out of this pass; see TODO.md.
 
 static func build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState) -> Dictionary:
+	return _build(chart, turn, fleet_positions, reveal_state, false)
+
+## Ground truth for the host's own admin console (§8) - every node's
+## letter/name/class/consequence is always attached, regardless of
+## whether the fleet has actually been there. **Never wire this to the
+## TV or to anything that reaches the network** - it's a separate
+## entrypoint precisely so the redacted `build()` path (what the TV and
+## GameState.to_public_dict() actually use) has no flag or parameter
+## that could accidentally be flipped to this. The admin console is its
+## own scene, never routed to the second monitor, same boundary
+## CLAUDE.md and the spec already draw for it.
+static func build_ground_truth(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState) -> Dictionary:
+	return _build(chart, turn, fleet_positions, reveal_state, true)
+
+static func _build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, reveal_all: bool) -> Dictionary:
 	var groups := fleet_positions.groups()
 
 	var unit_group: Dictionary[String, String] = {}
@@ -37,7 +52,7 @@ static func build(chart: String, turn: int, fleet_positions: FleetPositions, rev
 
 	var nodes: Array[Dictionary] = []
 	for coordinate in StarChart.all_coordinates():
-		nodes.append(_build_node(coordinate, chart, visited, occupied, reveal_state))
+		nodes.append(_build_node(coordinate, chart, visited, occupied, reveal_state, reveal_all))
 
 	var group_dicts: Array[Dictionary] = []
 	for group: Dictionary in groups:
@@ -52,7 +67,7 @@ static func build(chart: String, turn: int, fleet_positions: FleetPositions, rev
 		"path_tree": PathTree.build(fleet_positions.trails, unit_group, aegis_group_id),
 	}
 
-static func _build_node(coordinate: String, chart: String, visited: Dictionary, occupied: Dictionary, reveal_state: RevealState) -> Dictionary:
+static func _build_node(coordinate: String, chart: String, visited: Dictionary, occupied: Dictionary, reveal_state: RevealState, reveal_all: bool) -> Dictionary:
 	var forced: String = reveal_state.forced_states.get(coordinate, "")
 	var claims: Array = reveal_state.claims_at(coordinate)
 	var is_visited: bool = visited.get(coordinate, false)
@@ -80,7 +95,7 @@ static func _build_node(coordinate: String, chart: String, visited: Dictionary, 
 	# "force state" override can change what's *displayed* without ever
 	# becoming a path to leaking real content for a node the fleet
 	# hasn't actually reached.
-	if is_visited or is_occupied:
+	if reveal_all or is_visited or is_occupied:
 		if coordinate == StarChart.START:
 			node["letter"] = "START"
 			node["name"] = "Fleet Origin"
@@ -155,11 +170,17 @@ static func _build_group(group: Dictionary) -> Dictionary:
 		"label": group["label"],
 		"at": group["at"],
 		"representative": {
+			"id": representative,
 			"abbr": _ABBREVIATIONS.get(representative, representative.to_upper()),
 			"colour": "#" + ShipColors.for_ship(representative).to_html(false),
 			"is_aegis": representative == FleetPositions.AEGIS,
 		},
 		"members": member_names,
+		# Raw unit ids alongside the display names above - not secret
+		# (capital ship names are public in the fiction), needed by the
+		# admin console's "set representative" control to actually call
+		# FleetPositions.set_group_representative(group_id, unit_id).
+		"member_ids": (members as Array).duplicate(),
 		"pursuit": group["pursuit"],
 		"pending_merge_pursuits": group["pending_merge_pursuits"],
 	}
