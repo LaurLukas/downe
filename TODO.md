@@ -2462,10 +2462,12 @@ the numbers will not be seen."*
    AEGIS white outline. **Not built**: the animated pulse ring itself
    (drawn as a static ring at rest scale instead - same "structural now,
    Tween later" call already made for the Wolf Attack screen's v1 pass),
-   the token's index disc (rail-linkage badge - moot until the rail
-   redesign below happens), and the "damaged member" bottom-edge/`DMG`
-   tag (needs a definition of "ship damaged" this project hasn't settled
-   - a ship has per-console damage, not a single damaged flag).
+   the token's index disc (a map-to-rail-card link badge - the rail
+   redesign below now has real index numbers on each card to link *to*,
+   so this is buildable, just not done yet), and the "damaged member"
+   bottom-edge/`DMG` tag (needs a definition of "ship damaged" this
+   project hasn't settled - a ship has per-console damage, not a single
+   damaged flag).
 3. [x] **Wolves are loud** (§4 node styling + glow layer) - built for the
    *map* half. Wolf nodes get the 5px `WOLF` ring + tinted fill + the
    radial glow. **The rail's Wolf Presence block (§6.2) is not built** -
@@ -2631,18 +2633,50 @@ correctly with `craft` threaded all the way through from `GameState`).
   against the assigned slot" scripts), but as a real committed test
   file this time, not a throwaway. Natural next step - the geometry
   this would check now actually exists to check.
-- [ ] **Full rail redesign (§6)** - still not built. The group card kept
-  its existing simple layout (just recoloured to `FLEET`/`FLEET_ALT`,
-  see priority 1 above) rather than the spec's full reformat (title/
-  coordinate/letter-badge row, consequence-summary line, scout-reach
-  lines, pursuit pips instead of a bare number). **The Wolf Presence
-  block (§6.2) is entirely unbuilt** - a filtered, C1-safe list of only
-  `visited`/`occupied` wolf systems the room should care about, with
-  "LEFT Tn" (now buildable - `left_turn` exists) or "HERE" per system.
-  The Scout Reports block (§6.3) *is* built (see above) since removing
-  claim text from the map without it would have been a regression, not
-  a partial improvement - it just isn't styled to the spec's exact
-  dashed-border/wash treatment yet.
+- [x] **Full rail redesign (§6) - built.** All three blocks now land in
+  `star_map_screen.gd`:
+  - **Group card (§6.1)** rebuilt to the full format: a `RichTextLabel`
+    header (`(1) MAIN FLEET  4454  [M]` - index, label, coordinate in
+    the group's accent, a class-tinted letter badge via inline BBCode
+    `[bgcolor=]`, since a plain `Label` can't mix colours/backgrounds
+    inline), uppercased member list, the current node's
+    `consequence_summary` line in the class tint (only present when the
+    node actually has one - reads straight off the same iff-visited
+    field the leak tests already cover), scout reach (ranged scouts
+    share one line, `SCOUT REACH · STARLIGHT 2`; each unlimited-range
+    scout gets its own, `ENDEAVOUR · ANY SYSTEM`), and a real 10-cell
+    pursuit-pip row (new `star_map_pursuit_pips.gd`, mirrors `ui/tv/
+    pursuit_meter.gd`'s one-`_draw()`-call pattern with this screen's
+    own `CLAIM` fill / `WOLF`-danger-zone colours instead of that
+    screen's `AMBER`/`PURSUIT_DOOM`) plus the numeric value in `CLAIM`.
+  - **`HERE n` (§6.1's last field) - resolves the `turns_here` gap this
+    file flagged as deferred back when `fleet_positions.gd` was first
+    built.** Turned out not to need a new stored counter once
+    `visited_turns` existed: `HERE n` = `current_turn -
+    visited_turns.back() + 1` for the group's current node, computed
+    entirely in `star_map_screen.gd` (`_turns_here()`) - no `core/`
+    change needed.
+  - **Wolf Presence (§6.2) - built, genuinely new**, not a restyle of
+    anything. Filters `view["nodes"]` directly for `class == "wolf"` and
+    `state ∈ {visited, occupied}` - "structurally unable to read a
+    letter the projection did not send," same C1 property the spec asks
+    for, satisfied by construction rather than by care. Right column
+    reads `"<ABBR> HERE"` in the occupying group's accent when a group
+    is currently there, else `"LEFT Tn"` from the now-available
+    `left_turn` field, else nothing (a wolf system with neither - not
+    reachable today, since every visited node has at least one
+    `visited_turns` entry, but the code doesn't assume that).
+  - **Scout Reports (§6.3)** - already existed from the previous pass
+    (built alongside the map-side claim-text removal, not deferred);
+    unchanged here.
+
+  Verified with a throwaway driving script that dumped every rail
+  label's actual text against the real running scene across three
+  states (fresh fleet, a 3-way split with a wolf-system visit and a
+  claim, and after the occupying group moves on) - confirmed by eye
+  against expected values at each step, including Wolf Presence's
+  `"AEG HERE"` → `"LEFT T1"` transition when the occupying group left.
+  Full test suite still green (44 files, no `core/` changes this pass).
 
 ### Explicitly out of scope per the design itself, not a gap in this pass
 
