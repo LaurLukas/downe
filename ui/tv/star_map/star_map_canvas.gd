@@ -23,15 +23,14 @@ extends Control
 ## stripped unvisited letters at the source (C2). A bug in this file
 ## structurally cannot leak one.
 ##
-## Still not built, and still needs a live window to judge rather than
-## just code review: pixel-exact chip/token *feel* (the collision
-## avoidance below picks a correct non-overlapping slot per §4.1/§4.3's
-## rule, but the spec's own "measure it" instruction really means eyes
-## on a real screen) and the pulse's exact cadence/easing curve (a sine
-## approximation of "2.4s ease-in-out", not a Tween using Godot's actual
-## ease-in-out curve - see _draw_locator()'s own comment). The group
-## token's index disc (a map-to-rail-card link badge) is also still
-## unbuilt - see TODO.md.
+## Everything in the visual redesign handoff is now built. What's left
+## still needs a live window to judge rather than just code review:
+## pixel-exact chip/token *feel* (the collision avoidance below picks a
+## correct non-overlapping slot per §4.1/§4.3's rule, but the spec's own
+## "measure it" instruction really means eyes on a real screen) and the
+## pulse's exact cadence/easing curve (a sine approximation of "2.4s
+## ease-in-out", not a Tween using Godot's actual ease-in-out curve -
+## see _draw_locator()'s own comment). See TODO.md.
 
 const TOKEN_RADIUS := 26.0
 const INK := Color(0.03, 0.04, 0.08)
@@ -553,6 +552,20 @@ func _draw_group_tokens(token_positions: Dictionary) -> void:
 			label += " +%d" % (member_count - 1)
 
 		draw_string(abbr_font, Vector2(pos.x - TOKEN_RADIUS - 24.0, pos.y + TOKEN_RADIUS * 0.55 + 6.0), label, HORIZONTAL_ALIGNMENT_CENTER, (TOKEN_RADIUS + 24.0) * 2.0, abbr_size, INK)
+
+		# Index disc (§4.3): "dark fill, accent-coloured numeral... lives
+		# *inside the token*, not floating at the node's upper-left; on-
+		# node badges overlap the ring at every offset that still reads
+		# as attached." Drawn last so it sits on top of the icon/abbr
+		# text, at the token's upper-left corner - the rail card
+		# (star_map_screen.gd's own "(N)" prefix) carries the matching
+		# number, so a player can go from map token to rail card and
+		# back.
+		var disc_radius := TOKEN_RADIUS * 0.5
+		var disc_pos := pos + Vector2(-TOKEN_RADIUS, -TOKEN_RADIUS) * 0.62
+		draw_circle(disc_pos, disc_radius, INK)
+		draw_arc(disc_pos, disc_radius, 0.0, TAU, 24, colour, 1.5, true)
+		draw_string(abbr_font, Vector2(disc_pos.x - disc_radius, disc_pos.y + 6.0), str(int(group["index"])), HORIZONTAL_ALIGNMENT_CENTER, disc_radius * 2.0, abbr_size, colour)
 
 # --- legend bar (§7) -----------------------------------------------------------
 

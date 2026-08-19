@@ -1888,7 +1888,7 @@ ladder's cell row will need the same "measure the real font metric,
 don't guess a fixed height" treatment `_build_full_token()` now uses,
 given it's replacing the exact row that bug came from).
 
-## Mostly done — Star Map TV display (core/map/, TV screen, and admin console built)
+## Done — Star Map TV display (core/map/, TV screen, visual redesign, and admin console built)
 
 Two docs landed for this: `docs/star_map_tv_display.md` (the full spec -
 purpose, hard constraints, layout, rendering layers, data contract, host
@@ -1902,14 +1902,22 @@ The full headless `core/map/` layer is built and tested (see below) -
 `fleet_positions.gd`, `path_tree.gd`, `star_map_projection.gd`,
 `reveal_state.gd`, plus the split-fleet pursuit model and the two
 blockers under "Blockers" further down. The TV screen itself
-(`ui/tv/star_map/`) is built too, structural pass, reachable via one
-`HostConsole` button plus the §8 auto-show timing below. The admin
-console is built as well, as a new `HostConsole` section rather than the
-spec's proposed standalone `ui/admin/StarMapAdmin.tscn` - see that
-entry's own note on why. What's left is genuinely minor: scout-range/
-jump-range overlays (need state nothing tracks yet), visual polish, and
-`res://data/star_charts.json` as an actual runtime data file (still just
-living as reference docs).
+(`ui/tv/star_map/`) is built and has been through the full visual
+redesign pass below (colours, geometry, node/token composition, the
+rail, the animated locator pulse, real collision avoidance, and the
+group token's index disc), reachable via one `HostConsole` button plus
+the §8 auto-show timing below. The admin console is built as well, as a
+new `HostConsole` section rather than the spec's proposed standalone
+`ui/admin/StarMapAdmin.tscn` - see that entry's own note on why, and its
+"Set representative"/"Reconcile" flows are verified end to end through
+the real UI (see the `test_split_fleet.gd` item below). Both remaining
+backlog items (`res://data/star_charts.json` as a runtime file,
+`test_split_fleet.gd`) are resolved - see their entries below. What's
+left is genuinely out of scope for this pass, not unfinished: the
+scout-range/jump-range overlays (§6.6) were deliberately cut as
+clutter (see "Explicitly out of scope" further down), and pixel-exact
+visual feel can't be judged without a live TV, same as every other
+visual feature in this project.
 
 **§8 show/hide timing - built, with one piece deliberately left open.**
 `ui/main.gd` now starts (and restarts, so back-to-back jumps don't let
@@ -2307,21 +2315,47 @@ bug can't recur silently. Full suite still green (39 files).
       left a stray orphaned `return section` at the very end of the
       file - the driving script wouldn't even load the scene until both
       were fixed. Full test suite still green (43 files).
-- [ ] `res://data/star_charts.json` — copy/adapt `docs/star_charts.json`
-      into the runtime data path the spec's §9 file layout expects.
-      Existing `core/` precedent (`star_chart.gd`, `craft_definitions.gd`,
-      `star_system_definitions.gd`) hardcodes data as GDScript constants
-      rather than loading JSON at runtime - decide whether this feature
-      keeps that pattern (fold the JSON's content into the extended
-      `star_chart.gd` instead) or is the first thing in this project to
-      actually load a runtime data file, since the spec's file tree
-      assumes the latter.
-- [ ] `test_split_fleet.gd` from the spec's §9 list specifically (host
-      reassigning a representative mid-game, a merge prompt scenario end
-      to end) - most of what it would cover is already exercised by
-      `fleet_positions_test.gd`'s split/merge/representative tests above;
-      revisit once the admin console exists to test the actual host-facing
-      flow rather than calling the setters directly.
+- [x] `res://data/star_charts.json` as a runtime data file - **decided:
+      not built, staying GDScript constants.** Judgment call, no new
+      information changed the calculus since this was first flagged:
+      every other static roster in this project (`star_chart.gd`'s own
+      graph/`CHART_ASSIGNMENTS`/`PURSUIT_BAND`, `craft_definitions.gd`,
+      `star_system_definitions.gd`, and now `StarMapTokens.
+      NODE_PIXEL_POSITION` itself, sourced from this same JSON) is
+      hardcoded, typed, and covered by tests - and the data in
+      `docs/star_charts.json` is already fully absorbed into `core/`
+      that way (topology, letter assignments, pursuit bands, pixel
+      positions all cross-checked against it during this session, see
+      the chart-A bug fix above). Adding an actual runtime JSON loader
+      would be a new I/O pattern introduced for this one file alone,
+      against an established convention, with no behavioural gap it
+      closes - the spec's §9 file tree assumed a loader before any of
+      this cross-checking had happened. `docs/star_charts.json` stays
+      exactly what it's been throughout: source material, already fully
+      mined.
+- [x] `test_split_fleet.gd` from the spec's §9 list - **verified, not
+      built as a separate file.** The spec's own two scenarios (host
+      reassigning a representative mid-game; a merge-pursuit
+      reconciliation prompt) were driven end to end through the *real*
+      `HostConsole` UI with a throwaway script (button presses and
+      dropdown selection, not calling `FleetPositions` setters
+      directly): split AEGIS off alone, confirmed a "Set representative"
+      row appears for the remainder group and pressing it after picking
+      Shepherd in the dropdown actually updates
+      `FleetPositions.groups()[...]["representative"]`; then gave the
+      remainder a distinct pursuit value, rejoined AEGIS to trigger a
+      merge, confirmed a "Reconcile" row appears with the pending value,
+      and pressing it after setting a spin-box value clears
+      `pending_merge_pursuits` and applies the reconciled pursuit to the
+      survivor group. Both flows passed. No separate `test_split_fleet.gd`
+      file was added to the committed suite - `fleet_positions_test.gd`
+      already covers the underlying split/merge/representative/pending-
+      pursuit mechanics headlessly (per this entry's original note), and
+      a UI-driving script has no headless-`TestCase` equivalent in this
+      project's test framework (same reason every other host-console
+      flow in this file was verified the same throwaway-script way,
+      never as a committed test) - this closes the item as "verified via
+      the established project pattern," not "still open."
 
 ### Blockers — resolve before implementing trails (spec's own §10, items 1-3)
 
@@ -2529,11 +2563,21 @@ the numbers will not be seen."*
      real separations) still resolves to exactly the default position,
      not a needlessly-shifted one.
 
-   **Still not built**: the token's index disc (a map-to-rail-card link
-   badge - the rail redesign now has real index numbers on each card to
-   link *to*, so this is buildable, just not done yet). **Still not
-   verifiable without a live window**: exact pixel *feel* for both of
-   the above - the collision avoidance picks a provably correct
+   **Index disc (§4.3) - built, closing out this entry's last open
+   item.** Drawn last in `_draw_group_tokens()` so it sits on top of the
+   hull silhouette/abbreviation, at the token's upper-left corner: a
+   dark-ink-filled circle, an accent-coloured ring, and the group's
+   numeral in the accent colour, half the token's radius - matching the
+   rail card's own `(N)` index prefix (`star_map_screen.gd`'s group
+   header already had this) so a player can go from map token to rail
+   card and back by number. No new `core/` data needed - `group["index"]`
+   already existed for the rail header. Full test suite still green at
+   46 files (no test changes needed for a pure `_draw()` addition with
+   nothing new to assert beyond what the layout tests already cover).
+
+   **Still not verifiable without a live window**: exact pixel *feel*
+   for the collision avoidance and pulse ring above, and now the index
+   disc too - the collision avoidance picks a provably correct
    non-overlapping slot, but "measure it" (§4.1's own words) means eyes
    on a real screen, and the pulse's sine approximation vs. a Tween's
    real ease-in-out curve is a "close enough in code, judge on a TV"
@@ -2549,10 +2593,11 @@ the numbers will not be seen."*
    test suite green at 46 files (was 45; 2 new collision-avoidance tests
    landed in the existing `star_map_layout_test.gd` rather than adding a
    47th file).
-3. [x] **Wolves are loud** (§4 node styling + glow layer) - built for the
-   *map* half. Wolf nodes get the 5px `WOLF` ring + tinted fill + the
-   radial glow. **The rail's Wolf Presence block (§6.2) is not built** -
-   see "Also needed" below, folded into the rail-redesign deferral.
+3. [x] **Wolves are loud** (§4 node styling + glow layer) - built, both
+   halves. Wolf nodes get the 5px `WOLF` ring + tinted fill + the radial
+   glow on the map; the rail's Wolf Presence block (§6.2) landed in the
+   later "Full rail redesign" pass below (stale note removed - it used
+   to say not built, written before that pass happened).
 4. [x] **Numbers survive a bad panel** - built. Two node sizes
    (76px/84px), coordinate drawn inside the circle for `unknown`/
    `reported` nodes, moved into the info chip below (or above, for
