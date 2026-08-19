@@ -35,6 +35,7 @@ func _refresh() -> void:
 		game_state.turn_manager.turn_number,
 		game_state.fleet_positions,
 		game_state.reveal_state,
+		game_state.craft,
 	)
 	_title_label.text = "TURN %d  ·  CHART %s IN PLAY" % [int(view["turn"]), String(view["chart_id"])]
 	_canvas.view = view

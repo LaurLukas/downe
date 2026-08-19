@@ -761,7 +761,7 @@ func _rebuild_star_map_section() -> void:
 
 	var view := StarMapProjection.build_ground_truth(
 		game_state.chart_in_play, game_state.turn_manager.turn_number,
-		game_state.fleet_positions, game_state.reveal_state
+		game_state.fleet_positions, game_state.reveal_state, game_state.craft
 	)
 
 	var canvas_scroll := ScrollContainer.new()
@@ -800,13 +800,13 @@ func _rebuild_star_map_section() -> void:
 	var move_button := Button.new()
 	move_button.text = "Move"
 	move_button.pressed.connect(func() -> void:
-		game_state.fleet_positions.move_unit(unit_ids[move_unit_option.selected], coordinate_ids[move_coord_option.selected])
+		game_state.fleet_positions.move_unit(unit_ids[move_unit_option.selected], coordinate_ids[move_coord_option.selected], game_state.turn_manager.turn_number)
 	)
 	move_row.add_child(move_button)
 	var undo_button := Button.new()
 	undo_button.text = "Undo last move"
 	undo_button.pressed.connect(func() -> void:
-		game_state.fleet_positions.undo_last_move(unit_ids[move_unit_option.selected])
+		game_state.fleet_positions.undo_last_move(unit_ids[move_unit_option.selected], game_state.turn_manager.turn_number)
 	)
 	move_row.add_child(undo_button)
 	_star_map_section.add_child(move_row)

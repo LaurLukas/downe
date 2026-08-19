@@ -8,6 +8,25 @@ func test_initial_state_is_one_group_at_start() -> void:
 	assert_eq(groups[0]["representative"], "aegis", "initial representative should be AEGIS")
 	assert_eq(groups[0]["at"], StarChart.START, "should start at 0000")
 	assert_eq((groups[0]["members"] as Array).size(), 7, "should have all 7 units")
+	assert_eq((positions.visited_turns[StarChart.START] as Array), [0], "0000 should be seeded as visited at turn 0")
+
+func test_move_unit_records_the_arrival_turn() -> void:
+	var positions := FleetPositions.new()
+	positions.move_unit("aegis", "1413", 4)
+	assert_eq((positions.visited_turns["1413"] as Array), [4], "moving to a node should record the turn it happened")
+
+func test_move_unit_does_not_duplicate_the_same_turn() -> void:
+	var positions := FleetPositions.new()
+	positions.move_unit("aegis", "1413", 4)
+	positions.move_unit("dione", "1413", 4) # a second unit, same turn
+	assert_eq((positions.visited_turns["1413"] as Array), [4], "two arrivals in the same turn should not duplicate the entry")
+
+func test_visited_turns_accumulates_across_separate_visits() -> void:
+	var positions := FleetPositions.new()
+	positions.move_unit("aegis", "1413", 2)
+	positions.move_unit("aegis", "5143", 3)
+	positions.move_unit("aegis", "1413", 5) # returns later
+	assert_eq((positions.visited_turns["1413"] as Array), [2, 5], "returning to a node on a later turn should append, not replace")
 
 func test_sync_global_pursuit_updates_the_unsplit_group() -> void:
 	var positions := FleetPositions.new()
@@ -17,7 +36,7 @@ func test_sync_global_pursuit_updates_the_unsplit_group() -> void:
 func test_non_aegis_unit_splitting_off_forms_a_new_group() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(4)
-	positions.move_unit("icebreaker", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
 	var groups := positions.groups()
 	assert_eq(groups.size(), 2, "should now be two groups")
 
@@ -34,7 +53,7 @@ func test_non_aegis_unit_splitting_off_forms_a_new_group() -> void:
 func test_aegis_splitting_off_alone_keeps_the_main_fleet_identity() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(6)
-	positions.move_unit("aegis", "5143")
+	positions.move_unit("aegis", "5143", 1)
 	var groups := positions.groups()
 	assert_eq(groups.size(), 2, "should now be two groups")
 
@@ -51,7 +70,7 @@ func test_aegis_splitting_off_alone_keeps_the_main_fleet_identity() -> void:
 func test_split_groups_stop_tracking_global_pursuit() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(3)
-	positions.move_unit("icebreaker", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
 	positions.sync_global_pursuit(9) # simulate a later maintenance +2 etc on the legacy track
 	for group: Dictionary in positions.groups():
 		assert_eq(group["pursuit"], 3, "once split, a group should no longer move with the legacy global pursuit track")
@@ -59,10 +78,10 @@ func test_split_groups_stop_tracking_global_pursuit() -> void:
 func test_merge_survivor_is_the_group_containing_aegis() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(2)
-	positions.move_unit("icebreaker", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
 	var split_group_id: String = positions.groups().filter(func(g: Dictionary) -> bool: return g["representative"] == "icebreaker")[0]["id"]
 	positions.set_group_pursuit(split_group_id, 5)
-	positions.move_unit("icebreaker", StarChart.START)
+	positions.move_unit("icebreaker", StarChart.START, 1)
 
 	var groups := positions.groups()
 	assert_eq(groups.size(), 1, "should be back to one group after the merge")
@@ -73,8 +92,8 @@ func test_merge_survivor_is_the_group_containing_aegis() -> void:
 
 func test_merge_of_two_non_aegis_groups_survivor_is_the_mover() -> void:
 	var positions := FleetPositions.new()
-	positions.move_unit("icebreaker", "1413")
-	positions.move_unit("shepherd", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
+	positions.move_unit("shepherd", "1413", 1)
 	var groups := positions.groups()
 	assert_eq(groups.size(), 2, "aegis's group plus the merged pair")
 	var merged: Dictionary = groups.filter(func(g: Dictionary) -> bool: return g["representative"] != "aegis")[0]
@@ -83,10 +102,10 @@ func test_merge_of_two_non_aegis_groups_survivor_is_the_mover() -> void:
 
 func test_reconcile_group_pursuit_resolves_and_clears_pending() -> void:
 	var positions := FleetPositions.new()
-	positions.move_unit("icebreaker", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
 	var split_group_id: String = positions.groups().filter(func(g: Dictionary) -> bool: return g["representative"] == "icebreaker")[0]["id"]
 	positions.set_group_pursuit(split_group_id, 5)
-	positions.move_unit("icebreaker", StarChart.START)
+	positions.move_unit("icebreaker", StarChart.START, 1)
 
 	var merged_id: String = positions.groups()[0]["id"]
 	positions.reconcile_group_pursuit(merged_id, 7)
@@ -102,7 +121,7 @@ func test_representative_cannot_be_reassigned_away_from_aegis() -> void:
 
 func test_representative_can_be_reassigned_within_a_non_aegis_group() -> void:
 	var positions := FleetPositions.new()
-	positions.move_unit("aegis", "5143") # aegis leaves; remainder is a non-AEGIS group
+	positions.move_unit("aegis", "5143", 1) # aegis leaves; remainder is a non-AEGIS group
 	var remainder_id: String = positions.groups().filter(func(g: Dictionary) -> bool: return g["representative"] != "aegis")[0]["id"]
 	positions.set_group_representative(remainder_id, "shepherd")
 	var remainder: Dictionary = positions.groups().filter(func(g: Dictionary) -> bool: return g["id"] == remainder_id)[0]
@@ -110,21 +129,21 @@ func test_representative_can_be_reassigned_within_a_non_aegis_group() -> void:
 
 func test_undo_last_move_restores_previous_position() -> void:
 	var positions := FleetPositions.new()
-	positions.move_unit("aegis", "5143")
-	positions.undo_last_move("aegis")
+	positions.move_unit("aegis", "5143", 1)
+	positions.undo_last_move("aegis", 1)
 	assert_eq(positions.positions["aegis"], StarChart.START, "undo should restore the previous position")
 	assert_eq((positions.trails["aegis"] as Array).size(), 1, "undo should pop the trail entry, not just reset the position")
 
 func test_undo_last_move_is_a_no_op_with_no_history() -> void:
 	var positions := FleetPositions.new()
-	positions.undo_last_move("aegis")
+	positions.undo_last_move("aegis", 1)
 	assert_eq(positions.positions["aegis"], StarChart.START, "undo with no history should do nothing")
 
 func test_fleet_relocating_one_unit_at_a_time_ends_as_one_group_tracking_global_again() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(1)
 	for unit_id in FleetPositions.unit_ids():
-		positions.move_unit(unit_id, "1413")
+		positions.move_unit(unit_id, "1413", 1)
 	positions.sync_global_pursuit(3)
 	var groups := positions.groups()
 	assert_eq(groups.size(), 1, "moving every unit to the same node should end as one group, even if each move was reported separately")
@@ -134,10 +153,11 @@ func test_fleet_relocating_one_unit_at_a_time_ends_as_one_group_tracking_global_
 func test_to_dict_and_from_dict_round_trip() -> void:
 	var positions := FleetPositions.new()
 	positions.sync_global_pursuit(4)
-	positions.move_unit("icebreaker", "1413")
+	positions.move_unit("icebreaker", "1413", 1)
 	positions.set_group_label(positions.groups()[0]["id"], "MAIN FLEET (custom)")
 
 	var restored := FleetPositions.from_dict(positions.to_dict())
 	assert_eq(restored.positions["icebreaker"], "1413", "positions should round-trip")
 	assert_eq((restored.trails["icebreaker"] as Array), [StarChart.START, "1413"], "trails should round-trip")
 	assert_eq(restored.groups().size(), 2, "group count should round-trip")
+	assert_eq((restored.visited_turns["1413"] as Array), [1], "visited_turns should round-trip")

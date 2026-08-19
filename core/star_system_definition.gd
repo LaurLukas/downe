@@ -13,6 +13,23 @@ var display_name: String = ""
 ## unrated (printed as "—").
 var rating: String = ""
 
+## Star Map TV screen fields (ui/design_handoff_star_map/
+## star_map_tv_visual_implementation.md §9, additive to the projection
+## contract) - kept here, not in ui/ or star_map_projection.gd, per that
+## doc's own instruction: "do not let the TV scene hold the lookup
+## table - that would put all 21 names one bug away from the screen."
+## Subject to the same iff-visited absence rule as letter/name/class in
+## StarMapProjection - never sent for an unvisited node.
+##
+## short_name: ≤16 chars, every letter has one - the map's info-chip
+## label space is too small for full display_name.
+var short_name: String = ""
+## consequence_summary: ≤40 chars, only for letters with a real
+## on-arrival/standing rule (G, I, J, K, L, M, P) - "" for the rest,
+## matching StarMapProjection._consequence()'s existing derivation
+## instead of a second hand-typed flag.
+var consequence_summary: String = ""
+
 ## "X cards / Y opportunities" as printed - descriptive only. Y matches
 ## opportunities.size() by construction; cards_dealt is the one piece
 ## of information not otherwise derivable.
@@ -73,6 +90,8 @@ static func from_dict(data: Dictionary) -> StarSystemDefinition:
 	definition.letter = data["letter"]
 	definition.display_name = data["display_name"]
 	definition.rating = data.get("rating", "")
+	definition.short_name = data.get("short_name", "")
+	definition.consequence_summary = data.get("consequence_summary", "")
 	definition.cards_dealt = data.get("cards_dealt", 0)
 	definition.opportunities.assign(data.get("opportunities", []))
 	definition.repeatable_each_turn = data.get("repeatable_each_turn", false)

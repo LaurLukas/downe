@@ -2370,7 +2370,7 @@ persist) are all lower priority per the spec's own framing - "easy to
 change either way," worth a look at first playtest rather than deciding
 now.
 
-## Backlog — Star Map TV visual redesign (design handoff landed, not started)
+## Backlog — Star Map TV visual redesign (projection data layer done, rendering not started)
 
 A full design handoff arrived at `res://ui/design_handoff_star_map/` -
 same pattern as the Wolf Attack lane-layout handoff earlier in this file
@@ -2455,43 +2455,84 @@ the numbers will not be seen."*
 5. **Permanent legend bar** (§7) - new UI element, none of it exists
    today.
 
-### Projection data contract additions (§9) - four fields, `core/` work
+### Projection data contract additions (§9) - four fields, `core/` work - [x] built
 
-All derived from data `core/` already holds or can reach, per the spec's
-own framing - but two of the four need real new plumbing, not just a
-formatting pass in `star_map_projection.gd`:
+All four landed, with real new plumbing for three of them, not just a
+formatting pass:
 
-- `short_name` / `consequence_summary` per node - **new authored
-  content**, not derived. The spec gives 6 of 16 example short names
-  (`WOLF OUTPOST`, `WOLF FORTRESS`, `EXPLORER OUTPOST`, `ION NEBULA`,
-  `ASTEROIDS`, `ORIGIN`) - the other 10 letters' short names and all 16
-  consequence summaries (≤40 chars, e.g. `ATTACK ON ARRIVAL`) need
-  writing, as a lookup table keyed on letter, kept in `core/` per the
-  spec's own explicit instruction ("do not let the TV scene hold the
-  lookup table - that would put all 21 names one bug away from the
-  screen"). Same iff-visited absence rule as `letter`/`name`/`class` -
-  extend the leak test to cover both.
-- `left_turn` per node - **needs turn-stamped visit history that
-  doesn't exist anywhere in `core/map/` yet.** `FleetPositions.trails`
-  is an ordered list of coordinates with no turn number attached to
-  each entry - there's currently no way to answer "which turn did we
-  leave this node" at all. Real gap, not a formatting task; needs a
-  design decision (turn-stamp every trail entry? a separate
-  `coordinate -> last-departed-turn` map, updated wherever `_relocate()`
-  already runs?) before it can be built.
-- `scouts` per group - **needs a fleet-positions/craft cross-reference
-  that doesn't exist yet.** A scout's range (Starlight 2, Hummingbird 3,
-  Endeavour unlimited) belongs to whichever *ship* it's docked on
-  (`CraftState.docked_ship_id`), and which *group* that ship is
-  currently in comes from `FleetPositions` - nothing today joins those
-  two. `StarChart.reachable_within()`-equivalent BFS logic doesn't exist
-  yet either (`StarChart.graph_distance()` gives point-to-point
-  distance, not a reachable set) - this is real new logic, not a lookup.
-- `band_tint` per group - the easy one: purely derived from which
-  group's tier the render pass is already computing: true when a
-  group's home tier should get the accent fill, AEGIS's group winning
-  ties. Could arguably be computed in the renderer instead of the
-  projection; spec asks for it as a projection field, follow that.
+- [x] **`short_name` / `consequence_summary` per node - content authored
+  and reviewed with the user before landing** (drafted in-conversation,
+  two of the eighteen draft values changed on review - G's `SURVIVABLE`
+  → `LVL 5 PLANET`, P's `SPACE STATION` → `ANCIENT STATION` - see git
+  history for the reasoning). Live on `StarSystemDefinition` (`core/
+  star_system_definition.gd`), not in `ui/` or `star_map_projection.gd`,
+  per the spec's own instruction. `consequence_summary` only set for the
+  7 letters with a real standing/on-arrival rule (G, I, J, K, L, M, P),
+  matching `StarMapProjection._consequence()`'s existing derivation
+  rather than a second hand-typed flag. Same iff-visited absence rule as
+  `letter`/`name`/`class` - the leak test now covers both explicitly
+  (`test_only_visited_nodes_carry_letter_name_class`,
+  `test_serialized_projection_never_contains_an_unvisited_systems_name`,
+  `test_a_claim_round_trips_without_leaking_the_true_letter` all
+  extended). 2 new tests in `tests/core/star_system_definitions_test.gd`
+  checking every letter has a short_name ≤16 chars and
+  consequence_summary is present iff the letter actually has a rule.
+- [x] **`left_turn` per node - built on new `FleetPositions.visited_turns`
+  turn-stamped history**, resolving the design decision this item used
+  to flag as open: `move_unit()`/`undo_last_move()` now take the current
+  turn number (`GameState.turn_manager.turn_number`, threaded through
+  from `HostConsole`'s Move/Undo buttons) and record it into `coordinate
+  -> Array[int]` (deduped per turn), matching `docs/star_map_tv_display.md`
+  §7's own data contract, which already specced a `visited_turns` field
+  on the node dict that had never actually been built. `left_turn =
+  visited_turns.back()`, omitted while the node is `occupied` (the rail
+  shows who's there instead, per §6.2) - computed directly in
+  `star_map_projection.gd`, not stored twice. `0000` seeds
+  `visited_turns = [0]` in `FleetPositions._init()`, matching the
+  original spec's own worked example. Persisted (`to_dict()`/
+  `load_from_dict()`) for crash recovery. 7 new tests split across
+  `tests/core/map/fleet_positions_test.gd` (the underlying recording:
+  arrival turns, same-turn dedup, accumulation across separate visits,
+  the `0000` seed, round-trip) and `tests/core/map/star_map_projection_test.gd`
+  (`left_turn` present/absent correctly across occupied/departed/never-
+  visited states).
+- [x] **`scouts` per group - built on a new `StarChart.reachable_within()`
+  BFS and a new `core/map/scout_ranges.gd`.** `reachable_within(from,
+  hops)` (5 new tests in `tests/core/star_chart_test.gd`) fills the gap
+  this item flagged - `graph_distance()` only ever gave point-to-point
+  distance, nothing computed a reachable *set*. `ScoutRanges` holds the
+  three scouts' ranges (Starlight 2, Hummingbird 3, Endeavour unlimited)
+  as reference data, explicitly not a rule the engine enforces - same
+  "public information, not a scout-honesty check" reasoning `core/craft/
+  abilities/scout_system.gd`'s own comment already establishes for these
+  exact numbers (5 new tests in `tests/core/map/scout_ranges_test.gd`).
+  `StarMapProjection` now takes a `craft: Dictionary` parameter (all
+  three `build()`/`build_ground_truth()`/call sites updated) and joins
+  each scout's *live* `CraftState.docked_ship_id` against `FleetPositions`'
+  current groups - deliberately not each scout's home ship, so a
+  redeployed scout (the `redeploy` ability) follows its craft to
+  whichever group its new host ship is actually in. 2 new tests cover
+  both the normal case and the redeploy-follows-the-craft case.
+- [x] **`band_tint` per group** - the easy one, exactly as scoped: derived
+  from which group's tier each render pass is already computing, AEGIS's
+  group winning ties for a shared tier. 2 new tests.
+
+**One real bug caught by the tests, not the implementation**: the first
+draft of the AEGIS-wins-a-shared-tier test picked "the first non-AEGIS
+group in the array" to check against band_tint being false, and failed -
+tracing it showed the test's own fixture (moving only 2 of 7 units)
+produces *three* groups, not two, and the array's first non-AEGIS entry
+was the uncontested tier-0 remainder (correctly band_tint=true), not the
+tier-1 group actually sharing AEGIS's band. Fixed by selecting the
+group by membership (`"Icebreaker" in members`) instead of by array
+position - `_band_tint_winners()` itself was already correct.
+
+All new/changed code verified against the real running app, not just
+unit tests: a throwaway driving script drove `HostConsole`'s actual Move
+button (confirmed `visited_turns` recorded the real current turn) and
+instantiated the real `StarMapScreen` (confirmed `scouts` populated
+correctly with `craft` threaded all the way through from `GameState`).
+44 test files total (was 43), all green.
 
 ### Also needed, not called out as its own numbered item but real work
 

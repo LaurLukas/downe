@@ -86,6 +86,28 @@ func test_graph_distance_multi_hop() -> void:
 func test_graph_distance_unreachable_returns_negative_one() -> void:
 	assert_eq(StarChart.graph_distance("0000", "no-such-node"), -1, "an unknown node should be unreachable")
 
+func test_reachable_within_one_hop_matches_direct_neighbors() -> void:
+	var reachable := StarChart.reachable_within("0000", 1)
+	var neighbors := StarChart.neighbors_of("0000")
+	assert_eq(reachable.size(), neighbors.size(), "1-hop reachability should match the direct neighbor list")
+	for neighbor: String in neighbors:
+		assert_true(neighbor in reachable, "%s should be reachable within 1 hop of 0000" % neighbor)
+	assert_true(not ("0000" in reachable), "the origin itself should not be in its own reachable set")
+
+func test_reachable_within_grows_monotonically_with_more_hops() -> void:
+	var one_hop := StarChart.reachable_within("0000", 1)
+	var two_hop := StarChart.reachable_within("0000", 2)
+	for coordinate: String in one_hop:
+		assert_true(coordinate in two_hop, "everything reachable in 1 hop should still be reachable in 2")
+	assert_true(two_hop.size() > one_hop.size(), "2 hops should reach strictly more nodes than 1 from a non-leaf start")
+
+func test_reachable_within_zero_hops_is_empty() -> void:
+	assert_true(StarChart.reachable_within("0000", 0).is_empty(), "0 hops should reach nothing")
+
+func test_reachable_within_large_hop_count_reaches_every_other_node() -> void:
+	var reachable := StarChart.reachable_within("0000", 21)
+	assert_eq(reachable.size(), 21, "with enough hops, every other node on the 22-node graph should be reachable")
+
 func test_pursuit_reduction_for_start_is_zero() -> void:
 	assert_eq(StarChart.pursuit_reduction_at(StarChart.START), 0, "0000 is never a jump target and has no pursuit reduction")
 

@@ -53,6 +53,16 @@ static func unit_ids() -> Array[String]:
 var positions: Dictionary[String, String] = {}
 var trails: Dictionary[String, Array] = {}
 
+## coordinate -> Array[int] of turn numbers a unit was recorded arriving
+## there, oldest first, deduped per turn. docs/star_map_tv_display.md
+## §7's own data contract already speced a `visited_turns` field on the
+## node dict; ui/design_handoff_star_map/
+## star_map_tv_visual_implementation.md §9's `left_turn` derives from
+## it directly ("visited_turns.back() when no unit is there"). Requires
+## the caller to supply the current turn number to move_unit()/
+## undo_last_move(), since this module is otherwise turn-agnostic.
+var visited_turns: Dictionary[String, Array] = {}
+
 var _group_of_unit: Dictionary[String, String] = {}
 ## group_id -> {label, representative, pursuit, pending_merge_pursuits}.
 var _groups: Dictionary[String, Dictionary] = {}
@@ -65,6 +75,7 @@ func _init() -> void:
 		trails[unit_id] = [StarChart.START] as Array[String]
 		_group_of_unit[unit_id] = "g1"
 	_groups["g1"] = _new_group_record("MAIN FLEET", AEGIS, 0)
+	visited_turns[StarChart.START] = [0]
 
 func _new_group_record(label: String, representative: String, pursuit: int) -> Dictionary:
 	return {
@@ -92,24 +103,34 @@ func sync_global_pursuit(value: int) -> void:
 	changed.emit()
 
 ## The host's "Move unit" control (§8). Adjacency is *not* enforced -
-## jump failures and host corrections can put a ship anywhere.
-func move_unit(unit_id: String, coordinate: String) -> void:
+## jump failures and host corrections can put a ship anywhere. `turn`
+## is the current game turn (GameState.turn_manager.turn_number) - see
+## visited_turns above.
+func move_unit(unit_id: String, coordinate: String, turn: int) -> void:
 	if not positions.has(unit_id):
 		return
 	trails[unit_id].append(coordinate)
-	_relocate(unit_id, coordinate)
+	_relocate(unit_id, coordinate, turn)
 
 ## The host's "Undo last move" control (§8) - pops the trail entry and
 ## restores the unit to wherever it was before.
-func undo_last_move(unit_id: String) -> void:
+func undo_last_move(unit_id: String, turn: int) -> void:
 	if not trails.has(unit_id) or trails[unit_id].size() <= 1:
 		return
 	trails[unit_id].pop_back()
-	_relocate(unit_id, trails[unit_id][-1])
+	_relocate(unit_id, trails[unit_id][-1], turn)
 
-func _relocate(unit_id: String, new_coordinate: String) -> void:
+func _record_visit(coordinate: String, turn: int) -> void:
+	if not visited_turns.has(coordinate):
+		visited_turns[coordinate] = []
+	var entries: Array = visited_turns[coordinate]
+	if entries.is_empty() or entries[-1] != turn:
+		entries.append(turn)
+
+func _relocate(unit_id: String, new_coordinate: String, turn: int) -> void:
 	var old_coordinate: String = positions[unit_id]
 	positions[unit_id] = new_coordinate
+	_record_visit(new_coordinate, turn)
 	if new_coordinate == old_coordinate:
 		changed.emit()
 		return
@@ -264,9 +285,13 @@ func to_dict() -> Dictionary:
 	var groups_dict := {}
 	for group_id: String in _groups:
 		groups_dict[group_id] = _groups[group_id].duplicate(true)
+	var visited_turns_dict := {}
+	for coordinate: String in visited_turns:
+		visited_turns_dict[coordinate] = (visited_turns[coordinate] as Array).duplicate()
 	return {
 		"positions": positions.duplicate(),
 		"trails": trails_dict,
+		"visited_turns": visited_turns_dict,
 		"group_of_unit": _group_of_unit.duplicate(),
 		"groups": groups_dict,
 		"next_group_number": _next_group_number,
@@ -284,6 +309,14 @@ func load_from_dict(data: Dictionary) -> void:
 		for coordinate: Variant in (raw_trails[unit_id] as Array):
 			trail.append(String(coordinate))
 		trails[unit_id] = trail
+
+	visited_turns.clear()
+	var raw_visited_turns: Dictionary = data.get("visited_turns", {})
+	for coordinate: String in raw_visited_turns:
+		var turns: Array = []
+		for value: Variant in (raw_visited_turns[coordinate] as Array):
+			turns.append(int(value))
+		visited_turns[coordinate] = turns
 
 	var raw_group_of_unit: Dictionary = data.get("group_of_unit", {})
 	for unit_id: String in raw_group_of_unit:

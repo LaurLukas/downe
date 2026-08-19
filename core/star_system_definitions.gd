@@ -92,45 +92,57 @@ static func _opportunities_by_letter() -> Dictionary[String, Array]:
 static func _build_definitions() -> Dictionary[String, StarSystemDefinition]:
 	var opportunities_by_letter := _opportunities_by_letter()
 
+	# short_name/consequence_summary: ui/design_handoff_star_map/
+	# star_map_tv_visual_implementation.md §9 - drafted and reviewed with
+	# the user before landing here (see TODO.md's Star Map section for
+	# the draft/reasoning). consequence_summary only where a real
+	# on-arrival/standing rule exists (G, I, J, K, L, M, P) - matches
+	# StarMapProjection._consequence()'s existing derivation.
 	var raw: Dictionary[String, Dictionary] = {
-		"A": {"letter": "A", "display_name": "Lichen-Covered Asteroids", "rating": "Poor", "cards_dealt": 6},
-		"B": {"letter": "B", "display_name": "Ice Asteroids", "rating": "Poor", "cards_dealt": 6},
-		"C": {"letter": "C", "display_name": "Rare Element Moon", "rating": "Poor", "cards_dealt": 6},
-		"D": {"letter": "D", "display_name": "Abandoned Explorer Outpost", "rating": "Neutral", "cards_dealt": 6},
-		"E": {"letter": "E", "display_name": "I.C.S.S. Athena Survivors", "cards_dealt": 6},
-		"F": {"letter": "F", "display_name": "Abandoned Refuelling Station", "cards_dealt": 6},
+		"A": {"letter": "A", "display_name": "Lichen-Covered Asteroids", "rating": "Poor", "cards_dealt": 6, "short_name": "LICHEN FIELD"},
+		"B": {"letter": "B", "display_name": "Ice Asteroids", "rating": "Poor", "cards_dealt": 6, "short_name": "ICE ASTEROIDS"},
+		"C": {"letter": "C", "display_name": "Rare Element Moon", "rating": "Poor", "cards_dealt": 6, "short_name": "ELEMENT MOON"},
+		"D": {"letter": "D", "display_name": "Abandoned Explorer Outpost", "rating": "Neutral", "cards_dealt": 6, "short_name": "EXPLORER OUTPOST"},
+		"E": {"letter": "E", "display_name": "I.C.S.S. Athena Survivors", "cards_dealt": 6, "short_name": "ATHENA SURVIVORS"},
+		"F": {"letter": "F", "display_name": "Abandoned Refuelling Station", "cards_dealt": 6, "short_name": "FUEL STATION"},
 		"G": {
 			"letter": "G", "display_name": "Level 5 Survivable Planet", "cards_dealt": 8,
 			"suppresses_pursuit_reduction": true,
+			"short_name": "LVL 5 PLANET", "consequence_summary": "NO PURSUIT REDUCTION",
 		},
-		"H": {"letter": "H", "display_name": "Derelict Research Vessel", "cards_dealt": 8},
+		"H": {"letter": "H", "display_name": "Derelict Research Vessel", "cards_dealt": 8, "short_name": "RESEARCH VESSEL"},
 		"I": {
 			"letter": "I", "display_name": "Ion Nebula", "cards_dealt": 8,
 			"suppresses_pursuit_rise_while_present": true,
 			"maintenance_damage_threshold": 3,
+			"short_name": "ION NEBULA", "consequence_summary": "PURSUIT FROZEN · DAMAGE EACH TURN",
 		},
 		"J": {
 			"letter": "J", "display_name": "Unstable Star", "cards_dealt": 3,
 			"repeatable_each_turn": true,
 			"maintenance_damage_threshold": 4,
+			"short_name": "UNSTABLE STAR", "consequence_summary": "DAMAGE ON 4+ EVERY TURN",
 		},
 		"K": {
 			"letter": "K", "display_name": "Abandoned Wolf Supply Outpost", "cards_dealt": 3,
 			"repeatable_each_turn": true,
 			"has_hidden_difficulty": true,
 			"triggers_wolf_attack_unless_critical": true,
+			"short_name": "WOLF SUPPLY", "consequence_summary": "WOLF ATTACK UNLESS CRITICAL SUCCESS",
 		},
 		"L": {
 			"letter": "L", "display_name": "Active Wolf Outpost", "cards_dealt": 6,
 			"triggers_wolf_attack_on_arrival": true,
 			"wolf_attack_min_battlestations": 1, "wolf_attack_min_capacity": 20,
 			"away_mission_blocked_while_wolf_base_operational": true,
+			"short_name": "WOLF OUTPOST", "consequence_summary": "ATTACK ON ARRIVAL",
 		},
 		"M": {
 			"letter": "M", "display_name": "Active Wolf Fortress", "cards_dealt": 6,
 			"triggers_wolf_attack_on_arrival": true,
 			"wolf_attack_min_battlestations": 2, "wolf_attack_min_capacity": 25,
 			"away_mission_blocked_while_wolf_base_operational": true,
+			"short_name": "WOLF FORTRESS", "consequence_summary": "ATTACK ON ARRIVAL",
 		},
 		# N, O, P: "New Eden candidates" - bespoke non-card completion
 		# conditions, not the standard opportunity system. Data/topology
@@ -138,16 +150,19 @@ static func _build_definitions() -> Dictionary[String, StarSystemDefinition]:
 		"N": {
 			"letter": "N", "display_name": "Ancient Jump Ring", "is_new_eden_candidate": true,
 			"new_eden_description": "Repair: 10 materials, an Engineering Shuttle, and 5 different console upgrades or science devices on the Endeavour research lab, each with 4 crosses. Fuel: 5 strytium fuel per ship passing through. The ring can then be sabotaged from the far side to stop the Wolf fleet following.",
+			"short_name": "JUMP RING",
 		},
 		"O": {
 			"letter": "O", "display_name": "Deep Nebula", "is_new_eden_candidate": true,
 			"new_eden_description": "Scout missions can be launched into the nebula if in range; each raises the success chance. To settle, each ship performs a long jump and rolls 1d6 +1 per scouting mission performed here. 9 or more = New Eden reached; otherwise that ship is lost, and each lost ship adds +1 to subsequent ships' rolls. The accumulated bonus must never be shown to players - a Wolf Agent can lie about having scanned the nebula.",
+			"short_name": "DEEP NEBULA",
 		},
 		"P": {
 			"letter": "P", "display_name": "Ancient Space Station", "is_new_eden_candidate": true,
 			"triggers_wolf_attack_on_arrival": true,
 			"wolf_attack_min_battlestations": 1, "wolf_attack_min_capacity": 20,
 			"new_eden_description": "On arrival, trigger a Wolf attack with at least 1 battlestation and 20 damage capacity; surviving wolves attack again repeatedly until destroyed. Liberate: defeat all Wolf forces. Power: cannibalise ships with Reactor consoles supplying at least 18 consoles' worth of power.",
+			"short_name": "ANCIENT STATION", "consequence_summary": "ATTACK ON ARRIVAL · REPEATS",
 		},
 	}
 

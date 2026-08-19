@@ -182,3 +182,31 @@ static func graph_distance(from: String, to: String) -> int:
 				next_frontier.append(neighbor)
 		frontier = next_frontier
 	return -1
+
+## Every coordinate reachable from `from` within `hops` jumps,
+## `from` itself excluded - a scout's actual reach (§6.6), or the jump-
+## range overlay (§6.7). Public information either way (a player can
+## count the same hops on their own paper chart), so computing/showing
+## this is not the constraint-1 violation that validating a *scout's
+## reported claim* against it would be - see
+## core/craft/abilities/scout_system.gd's own comment on that exact
+## distinction.
+static func reachable_within(from: String, hops: int) -> Array[String]:
+	var result: Array[String] = []
+	if hops <= 0:
+		return result
+	var visited: Dictionary[String, bool] = {from: true}
+	var frontier: Array[String] = [from]
+	for _step in hops:
+		var next_frontier: Array[String] = []
+		for coordinate: String in frontier:
+			for neighbor: String in neighbors_of(coordinate):
+				if visited.has(neighbor):
+					continue
+				visited[neighbor] = true
+				next_frontier.append(neighbor)
+				result.append(neighbor)
+		frontier = next_frontier
+		if frontier.is_empty():
+			break
+	return result

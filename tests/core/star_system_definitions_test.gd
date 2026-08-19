@@ -87,6 +87,22 @@ func test_ratings_match_source_for_poor_systems() -> void:
 func test_rating_neutral_for_d() -> void:
 	assert_eq(StarSystemDefinitions.get_definition("D").rating, "Neutral", "D should be rated Neutral")
 
+func test_every_letter_has_a_short_name_within_16_chars() -> void:
+	for letter: String in StarSystemDefinitions.all_letters():
+		var short_name := StarSystemDefinitions.get_definition(letter).short_name
+		assert_true(not short_name.is_empty(), "%s should have a short_name for the star map's info chip" % letter)
+		assert_true(short_name.length() <= 16, "%s's short_name %s should be at most 16 chars, got %d" % [letter, short_name, short_name.length()])
+
+func test_consequence_summary_only_present_for_letters_with_a_real_standing_rule() -> void:
+	var expected_present := ["G", "I", "J", "K", "L", "M", "P"]
+	for letter: String in StarSystemDefinitions.all_letters():
+		var summary := StarSystemDefinitions.get_definition(letter).consequence_summary
+		if letter in expected_present:
+			assert_true(not summary.is_empty(), "%s has a real on-arrival/standing rule and should have a consequence_summary" % letter)
+			assert_true(summary.length() <= 40, "%s's consequence_summary %s should be at most 40 chars, got %d" % [letter, summary, summary.length()])
+		else:
+			assert_true(summary.is_empty(), "%s has no on-arrival/standing rule and should have no consequence_summary" % letter)
+
 func test_no_minerals_resource_type_appears_anywhere() -> void:
 	# "The system card says '2 minerals'. There is no such resource. It
 	# means materials. Do not add a minerals type." - source doc §1.2.
