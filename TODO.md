@@ -2370,7 +2370,7 @@ persist) are all lower priority per the spec's own framing - "easy to
 change either way," worth a look at first playtest rather than deciding
 now.
 
-## Backlog — Star Map TV visual redesign (projection data layer done, rendering not started)
+## Backlog — Star Map TV visual redesign (data layer + first rendering pass done)
 
 A full design handoff arrived at `res://ui/design_handoff_star_map/` -
 same pattern as the Wolf Attack lane-layout handoff earlier in this file
@@ -2437,23 +2437,90 @@ the numbers will not be seen."*
   the relocation arc" - this is the actual fix for "not sure what the
   yellow line is", not a restyle for its own sake.
 
-### Priority order, per the spec's own framing (§1)
+### Priority order, per the spec's own framing (§1) - [x] 1, 3, 4, 5 built; 2 partial
 
-1. **One colour, one meaning** (§3) - single highest-value change per
-   the spec itself.
-2. **Fleet-as-beacon** (§4.2/§4.3) - pulse ring + corner brackets + halo
-   + ship-silhouette token. New animation budget beyond what
-   `StarMapScreen` currently has none of (matches the Wolf Attack
-   screen's own "structural pass now, `Tween`-based polish later"
-   precedent - this is the first polish pass for this screen, not a
-   second structural one).
-3. **Wolves are loud** (§4, wolf node styling + glow layer + rail's
-   Wolf Presence block, §6.2).
-4. **Numbers survive a bad panel** - state-dependent coordinate
-   placement (§4: inside empty `unknown`/`reported` nodes, moved to the
-   info chip for `visited`/`occupied`), no text under 18px anywhere.
-5. **Permanent legend bar** (§7) - new UI element, none of it exists
-   today.
+1. [x] **One colour, one meaning** (§3) - built. New `ui/tv/star_map/
+   star_map_tokens.gd` (matches `wolf_attack_tokens.gd`'s "one table,
+   not per-scene literals" pattern) holds the full `FLEET`/`FLEET_ALT`/
+   `WOLF`/`CLAIM`/`HAZARD`/`KNOWN`/`POOR`/`EDEN`/`UNKNOWN` table exactly
+   as specced; `star_map_canvas.gd`'s old ad hoc `CLASS_TINT` dict is
+   gone. Group tokens/cards/trails all now read `FLEET`
+   (AEGIS)/`FLEET_ALT` (everyone else) instead of each ship's own
+   accent hex - the deliberate "no colour does two jobs" trade the spec
+   asks for, dropping per-ship identity colour from this screen
+   entirely (still lives in `docs/ship_colors.md`/`core/ship_colors.gd`
+   for whatever else wants it).
+2. [~] **Fleet-as-beacon** (§4.2/§4.3) - partially built. Landed: corner
+   brackets on the occupied node (in the occupying group's `FLEET`/
+   `FLEET_ALT` accent), a soft radial glow approximated with concentric
+   fading circles (no shader - see `_draw_soft_glow()`'s own comment),
+   and the group token now shows the representative's actual hull
+   silhouette (reusing `ShipIcon._TEXTURES` directly -
+   `res://ui/design_handoff_star_map/svg/capital-*.svg` is byte-
+   identical to the Wolf Attack screen's existing copy, confirmed by
+   diff, so no new preload list was needed) tinted dark ink, plus the
+   AEGIS white outline. **Not built**: the animated pulse ring itself
+   (drawn as a static ring at rest scale instead - same "structural now,
+   Tween later" call already made for the Wolf Attack screen's v1 pass),
+   the token's index disc (rail-linkage badge - moot until the rail
+   redesign below happens), and the "damaged member" bottom-edge/`DMG`
+   tag (needs a definition of "ship damaged" this project hasn't settled
+   - a ship has per-console damage, not a single damaged flag).
+3. [x] **Wolves are loud** (§4 node styling + glow layer) - built for the
+   *map* half. Wolf nodes get the 5px `WOLF` ring + tinted fill + the
+   radial glow. **The rail's Wolf Presence block (§6.2) is not built** -
+   see "Also needed" below, folded into the rail-redesign deferral.
+4. [x] **Numbers survive a bad panel** - built. Two node sizes
+   (76px/84px), coordinate drawn inside the circle for `unknown`/
+   `reported` nodes, moved into the info chip below (or above, for
+   `0000` only, per §4.1's explicit exception) once a node is
+   `visited`/`occupied`. Nothing under 18px.
+5. [x] **Permanent legend bar** (§7) - built, all 8 items with a real
+   swatch per item (ring/dashed ring/line/dotted/dashed arc), not just
+   text.
+
+**Second deliberate override, actually implemented this pass (the
+README's first override, non-uniform node scale factors, already
+landed earlier - see `core/star_chart.gd`'s history)**: scout-claim text
+moved off the map entirely. `star_map_canvas.gd`'s info chip now shows
+only a claim *count* (`2 CLAIMS · CONFLICT` when claims disagree, else
+`N CLAIM(S)`/`1 CLAIM`), dashed, in `CLAIM`. Verbatim claim text moved to
+a new **Scout Reports rail block** in `star_map_screen.gd`
+(`_rebuild_scout_reports()`) - newest first, stacked, never resolving a
+contradiction, scanning `view["nodes"]` for a `"claims"` key (the same
+leak-safe object the map itself reads, not a second path to the raw
+`RevealState`). This was necessary, not optional, to land in the same
+pass as the map-side change: removing claim text from the map without
+somewhere else to read it would have made claims silently unreadable,
+not just less prominent - a real regression, not a partial improvement.
+
+**Bug fixed in passing, found by tracing the old code rather than by a
+test**: dead (abandoned) branches that happened to run along a real
+graph edge were drawn as a **solid** grey line, not dashed - the
+original `_draw_trails()` only branched on `is_dead` for colour/width,
+not for the solid-vs-dashed choice, which was keyed on adjacency alone.
+Per §5, a dead branch should read as "still history, no longer
+competing" regardless of whether the specific segment happens to be a
+direct edge - now always dotted (`_draw_dashed_line()` for the adjacent
+case, `_draw_dashed_arc()` for non-adjacent), matching live branches'
+solid-if-adjacent/dashed-arc-if-not split only when the branch is
+actually live.
+
+**`ui/host/host_console.gd`'s admin ground-truth map picked up the same
+redesign for free** - it instantiates the same `StarMapCanvas` class the
+TV screen uses, just fed `build_ground_truth()`'s dict instead of the
+redacted one, so there's one rendering implementation, not two to keep
+in sync.
+
+Verified with a throwaway driving script exercising every new code path
+at once against the real scene tree (not just checking it doesn't throw
+on a fresh fleet): a wolf-system visit (glow + ring), a 3-way fleet
+split, two contradicting claims on one node plus a third claim
+elsewhere, a non-adjacent relocation (dashed arc + "JUMP FAILURE"
+label), the idle veil toggling, and the admin console's reused canvas -
+all redrawn without error. Full test suite still green (44 files, no
+`core/` changes this pass beyond what the projection-additions commit
+already covered).
 
 ### Projection data contract additions (§9) - four fields, `core/` work - [x] built
 
@@ -2536,24 +2603,46 @@ correctly with `craft` threaded all the way through from `GameState`).
 
 ### Also needed, not called out as its own numbered item but real work
 
-- Idle mode (§10) - one `idle_dim` flag, a translucent veil, draw-in
-  suppressed, pulse kept. Depends on nothing else above; could land
-  independently.
-- Title bar's `FLEET SPLIT · n GROUPS` chip (§8) - trivial, reads
-  directly off `groups.size()`, already available.
-- **New test file** `tests/test_star_map_layout.gd` (§11), explicitly
-  requested by name with 6 concrete checks (no two text elements
-  overlap >6px on both axes; nothing renders past x1920/y1080 - "the
-  first build lost a whole rail section this way"; rail column bottom
-  < y1010 at both the densest realistic state *and* the empty state;
-  every info chip closer to its own node than any other node's centre;
-  no text under 18px; minimum node-centre separation ≥160px for all 22
-  nodes) - "run it headless against the projection fixtures, not
-  against a screenshot," matching this project's own established
-  geometry-driving-script pattern (the Wolf Attack lane/ladder passes'
-  "measure `get_combined_minimum_size()` against the assigned slot"
-  scripts), but as a real committed test file this time, not a
-  throwaway.
+- [x] Idle mode (§10) - built, as literally the one flag the spec asks
+  for: `StarMapScreen.idle_dim` toggles a `%IdleVeil` `ColorRect` over
+  the whole screen. Draw-in suppression and "pulse kept" are both moot
+  right now (neither the draw-in animation nor the locator pulse exist
+  yet - see priority 2 above), so this is honestly simpler than the
+  spec's full description until those land. **Nothing calls
+  `idle_dim = true` yet** - `ui/main.gd`'s show/hide policy would need
+  to decide when "idle" actually applies, which is the same open
+  question already logged above (StarMapScreen isn't the TV's default
+  idle screen today, TVDisplay is) - the mechanism exists, the trigger
+  doesn't.
+- [x] Title bar's `FLEET SPLIT · n GROUPS` chip (§8) - built, appended
+  to the title text when `groups.size() > 1`, nothing further when the
+  fleet is whole.
+- [ ] **New test file** `tests/test_star_map_layout.gd` (§11), still not
+  built - explicitly requested by name with 6 concrete checks (no two
+  text elements overlap >6px on both axes; nothing renders past
+  x1920/y1080 - "the first build lost a whole rail section this way";
+  rail column bottom < y1010 at both the densest realistic state *and*
+  the empty state; every info chip closer to its own node than any
+  other node's centre; no text under 18px; minimum node-centre
+  separation ≥160px for all 22 nodes) - "run it headless against the
+  projection fixtures, not against a screenshot," matching this
+  project's own established geometry-driving-script pattern (the Wolf
+  Attack lane/ladder passes' "measure `get_combined_minimum_size()`
+  against the assigned slot" scripts), but as a real committed test
+  file this time, not a throwaway. Natural next step - the geometry
+  this would check now actually exists to check.
+- [ ] **Full rail redesign (§6)** - still not built. The group card kept
+  its existing simple layout (just recoloured to `FLEET`/`FLEET_ALT`,
+  see priority 1 above) rather than the spec's full reformat (title/
+  coordinate/letter-badge row, consequence-summary line, scout-reach
+  lines, pursuit pips instead of a bare number). **The Wolf Presence
+  block (§6.2) is entirely unbuilt** - a filtered, C1-safe list of only
+  `visited`/`occupied` wolf systems the room should care about, with
+  "LEFT Tn" (now buildable - `left_turn` exists) or "HERE" per system.
+  The Scout Reports block (§6.3) *is* built (see above) since removing
+  claim text from the map without it would have been a regression, not
+  a partial improvement - it just isn't styled to the spec's exact
+  dashed-border/wash treatment yet.
 
 ### Explicitly out of scope per the design itself, not a gap in this pass
 
