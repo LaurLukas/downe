@@ -2370,7 +2370,7 @@ persist) are all lower priority per the spec's own framing - "easy to
 change either way," worth a look at first playtest rather than deciding
 now.
 
-## Backlog — Star Map TV visual redesign (data layer + first rendering pass done)
+## Backlog — Star Map TV visual redesign (data layer, map, and rail all built - polish remains)
 
 A full design handoff arrived at `res://ui/design_handoff_star_map/` -
 same pattern as the Wolf Attack lane-layout handoff earlier in this file
