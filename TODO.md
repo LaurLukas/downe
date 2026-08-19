@@ -2619,20 +2619,88 @@ correctly with `craft` threaded all the way through from `GameState`).
 - [x] Title bar's `FLEET SPLIT · n GROUPS` chip (§8) - built, appended
   to the title text when `groups.size() > 1`, nothing further when the
   fleet is whole.
-- [ ] **New test file** `tests/test_star_map_layout.gd` (§11), still not
-  built - explicitly requested by name with 6 concrete checks (no two
-  text elements overlap >6px on both axes; nothing renders past
-  x1920/y1080 - "the first build lost a whole rail section this way";
-  rail column bottom < y1010 at both the densest realistic state *and*
-  the empty state; every info chip closer to its own node than any
-  other node's centre; no text under 18px; minimum node-centre
-  separation ≥160px for all 22 nodes) - "run it headless against the
-  projection fixtures, not against a screenshot," matching this
-  project's own established geometry-driving-script pattern (the Wolf
-  Attack lane/ladder passes' "measure `get_combined_minimum_size()`
-  against the assigned slot" scripts), but as a real committed test
-  file this time, not a throwaway. Natural next step - the geometry
-  this would check now actually exists to check.
+- [x] **New test file - built as `tests/ui/star_map_layout_test.gd`, not
+  literally `tests/test_star_map_layout.gd`** (§11 names that path, but
+  `run_tests.gd` only discovers `*_test.gd` by suffix - the spec's own
+  literal filename would have silently never run at all, so it was
+  named to match this project's real convention instead). All 6 checks
+  built:
+  1. No two node-centre labels overlap >6px on both axes - measured with
+     the real fonts/sizes `star_map_canvas.gd` actually draws with.
+  2. Nothing renders past x1920/y1080 - node circles, info chips, group
+     tokens, plus the rail/legend region constants themselves.
+  3. Rail column bottom < y1010, dense (two groups, three claims, three
+     wolf systems) and empty states. **Not a live measurement** - see
+     the test file's own header comment for why: a real instantiated
+     rail's `get_combined_minimum_size()`, read synchronously (no
+     `await`, matching `TestCase.run()`'s fully synchronous execution
+     model, which has no async support), measured 1353px for content
+     that actually lays out to 276px once a real frame elapses -
+     `RichTextLabel`'s `fit_content` needs a real layout pass to know
+     its assigned width before it can wrap correctly. Adding async test
+     support to the shared runner for this one check felt like too much
+     risk to the other 44 files' worth of tests; instead this is a
+     font-metric estimate that mirrors `star_map_screen.gd`'s own
+     rail-building conditionals line-for-line - catches the failure mode
+     the spec actually cites (a wholesale overflow), not a sub-pixel
+     wrapping miscalculation. A live window remains the authority for
+     exact pixels here, same as everywhere else in this project's visual
+     work.
+  4. Every info chip closer to its own node than any other - tested as
+     pure geometry for all 22 nodes × both displayable states, not tied
+     to one game-state fixture.
+  5. No text under 18px - checked as a single `StarMapTokens.
+     ALL_FONT_SIZES` list every draw call is now required to pull from
+     (see below).
+  6. Minimum node-centre separation ≥160px for all 22 nodes.
+
+  **Three real, previously-shipped bugs found and fixed by writing this
+  file, not by inspection:**
+  - The "JUMP FAILURE" trail label was drawn at **17px**, borrowed from
+    `WolfAttackTokens`' `T_CHIP` token (tuned for the *other* screen's
+    budget) - a genuine violation of this screen's own "no text below
+    18px" rule. Fixed by giving this screen its own
+    `StarMapTokens.ALL_FONT_SIZES` registry (7 named constants,
+    `FONT_SIZE_COORD` through `FONT_SIZE_EDGE_LABEL`) that every
+    `draw_string()` call on this screen now pulls from, so this class of
+    bug can't recur silently - check 5 verifies the registry itself, not
+    scattered literals.
+  - **`0000`'s info chip extended off the left edge of the canvas**
+    entirely (`x: -50`) - it sits at pixel x=80, close enough to the
+    left edge that a 260px-wide chip centred on it runs off-canvas. §4.1
+    already carves out a *vertical* exception for `0000` ("the one node
+    whose chip goes above it... left runs off canvas" - its own words)
+    but never actually resolves the horizontal case. Fixed by clamping
+    `chip_rect_for()`'s x-position to stay on-canvas - the position math
+    was refactored out of `_draw_info_chip()` into that standalone pure
+    function specifically so the test could call the exact same code the
+    renderer uses, not a second copy of it.
+  - **Node positions were being re-derived through a formula instead of
+    using the spec's own worked pixel table** - `star_map_canvas.gd` was
+    computing screen positions from `StarChart.NODE_POSITION`'s u/v
+    values (a *different* file's independent transcription, from
+    `docs/star_charts.json`) via §2.1's `NODE_ORIGIN`/`NODE_SPAN`
+    formula, when §2.1 explicitly says "use \[the worked table\], don't
+    re-derive." The re-derivation introduced enough floating-point drift
+    to fail check 6 (159.8px vs. the required 160px) for the one pair
+    that's already razor-thin in the spec's own numbers. Fixed by adding
+    `StarMapTokens.NODE_PIXEL_POSITION` (the literal 22-entry table from
+    §2.1) and using it directly; `StarChart.node_position()`/the u/v
+    table stay in `core/` as correct, independently-tested topology data
+    - just no longer what drives this screen's actual rendering.
+    **A real inconsistency in the source material surfaced along the
+    way, not introduced by this fix**: even using the spec's own exact
+    table, `1380`↔`6798` measure ~160.07px apart - the spec's prose
+    claims "163px minimum (6964↔6943)" as its closest pair, but
+    `6964`↔`6943` is actually ~162.8px by that same table, and
+    `1380`↔`6798` is tighter still. Recorded in
+    `star_map_tokens.gd`'s own comment rather than silently accepted or
+    papered over by loosening the test's threshold - these are fixed,
+    given reference positions, not something to adjust unilaterally.
+
+  Verified against the real running scene with a throwaway driving
+  script confirming `0000`'s chip now sits at `x=0` (clamped) instead of
+  `x=-50`. Full test suite green at 45 files (was 44).
 - [x] **Full rail redesign (§6) - built.** All three blocks now land in
   `star_map_screen.gd`:
   - **Group card (§6.1)** rebuilt to the full format: a `RichTextLabel`

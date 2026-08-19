@@ -32,12 +32,44 @@ const X_RAIL_RIGHT := 1890.0
 
 ## §2.1: paper rotated 90° CW, u->x, v->y - NOT a uniform scale (see
 ## that section's own note on why the earlier 1.153/1.152 uniform
-## mapping is superseded).
+## mapping is superseded). Kept for context only - node_screen_pos_for()
+## below is what actually drives rendering; see its own comment on why.
 const NODE_ORIGIN := Vector2(80, 112)
 const NODE_SPAN := Vector2(1250, 812)
 
 static func node_screen_pos(u: float, v: float) -> Vector2:
 	return NODE_ORIGIN + Vector2(u * NODE_SPAN.x, v * NODE_SPAN.y)
+
+## §2.1's own worked pixel table, used *directly* - "Resulting
+## positions, for test fixtures... use those, don't re-derive" is the
+## spec's own instruction. Re-deriving from StarChart.NODE_POSITION's
+## u/v values via node_screen_pos() above (that file's own transcription,
+## from docs/star_charts.json, independent of this one) introduced just
+## enough floating-point drift to fail tests/ui/star_map_layout_test.gd's
+## minimum-separation check for the one pair that's already razor-thin
+## in the spec's own table.
+##
+## That check's own near-miss is worth recording here too: 1380↔6798
+## measure ~160.07px apart in this exact table - the spec's prose claims
+## "163px minimum (6964↔6943)" as its closest pair, but 6964↔6943 is
+## actually ~162.8px by this same table, and 1380↔6798 is tighter still.
+## The prose doesn't match the spec's own worked table. Not a bug to fix
+## by moving nodes - these are given, fixed reference positions - just
+## flagged honestly rather than silently accepted or hidden by loosening
+## the test's own threshold.
+const NODE_PIXEL_POSITION: Dictionary[String, Vector2] = {
+	"0000": Vector2(80, 525), "1413": Vector2(230, 629), "5143": Vector2(322, 359),
+	"0488": Vector2(404, 780), "6837": Vector2(433, 523), "9997": Vector2(471, 200),
+	"6931": Vector2(592, 367), "4454": Vector2(626, 683), "1096": Vector2(757, 470),
+	"4753": Vector2(785, 227), "6964": Vector2(785, 826), "3068": Vector2(915, 338),
+	"6943": Vector2(915, 924), "0853": Vector2(942, 631), "2580": Vector2(969, 112),
+	"1964": Vector2(1073, 799), "6798": Vector2(1107, 205), "8378": Vector2(1137, 551),
+	"4888": Vector2(1240, 903), "1380": Vector2(1242, 119), "1836": Vector2(1269, 359),
+	"0408": Vector2(1330, 659),
+}
+
+static func node_screen_pos_for(coordinate: String) -> Vector2:
+	return NODE_PIXEL_POSITION.get(coordinate, Vector2.ZERO)
 
 # --- node sizes (§4) --------------------------------------------------------
 
@@ -91,3 +123,26 @@ static func class_tint(node_class: String) -> Color:
 ## hues fighting the wolf/claim/hazard palette for attention.
 static func group_colour(is_aegis: bool) -> Color:
 	return FLEET if is_aegis else FLEET_ALT
+
+# --- font sizes (§1: "no text anywhere below 18px") ------------------------
+# Centralized so tests/test_star_map_layout.gd can check every size this
+# screen actually uses against MIN_FONT_SIZE in one place, instead of
+# grepping draw_string() literals scattered across star_map_canvas.gd -
+# a real 17px violation (the "JUMP FAILURE" label, borrowed from
+# WolfAttackTokens' T_CHIP, tuned for the *other* screen's budget) was
+# found and fixed by building this list, not the other way around.
+
+const MIN_FONT_SIZE := 18
+
+const FONT_SIZE_COORD := 24 # unvisited/reported node's in-circle coordinate
+const FONT_SIZE_LETTER := 42 # visited/occupied node's in-circle letter
+const FONT_SIZE_CHIP := 20 # info chip text (§4.1)
+const FONT_SIZE_BAND_LABEL := 28 # band-scale labels (START, -1..-7)
+const FONT_SIZE_LEGEND := 18 # legend bar item labels (§7)
+const FONT_SIZE_TOKEN_ABBR := 18 # group token abbreviation (§4.3)
+const FONT_SIZE_EDGE_LABEL := 18 # "JUMP FAILURE" trail label (§5)
+
+const ALL_FONT_SIZES: Array[int] = [
+	FONT_SIZE_COORD, FONT_SIZE_LETTER, FONT_SIZE_CHIP, FONT_SIZE_BAND_LABEL,
+	FONT_SIZE_LEGEND, FONT_SIZE_TOKEN_ABBR, FONT_SIZE_EDGE_LABEL,
+]

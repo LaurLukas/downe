@@ -53,12 +53,40 @@ func _draw() -> void:
 	_draw_group_tokens()
 	_draw_legend()
 
-func _screen_pos(coordinate: String) -> Vector2:
-	var uv := StarChart.node_position(coordinate)
-	return StarMapTokens.node_screen_pos(uv.x, uv.y)
+static func _screen_pos(coordinate: String) -> Vector2:
+	return StarMapTokens.node_screen_pos_for(coordinate)
 
 static func _tier_of(coordinate: String) -> int:
 	return 0 if coordinate == StarChart.START else -StarChart.pursuit_reduction_at(coordinate)
+
+static func node_radius_for_state(state: String) -> float:
+	return StarMapTokens.NODE_RADIUS_LARGE if (state == "visited" or state == "occupied") else StarMapTokens.NODE_RADIUS_SMALL
+
+const CHIP_WIDTH := 260.0
+const CHIP_HEIGHT := 26.0
+
+## Pure position math, extracted out of _draw_info_chip() so
+## tests/ui/star_map_layout_test.gd can verify chip placement (§4.1's
+## collision rule) without a second, potentially-drifting copy of this
+## logic - the test calls this same function, not a re-derivation of it.
+##
+## x is clamped to stay on-canvas rather than always centred on the
+## node - 0000 sits at x=80, close enough to the left edge that a
+## centred 260px-wide chip would run off it entirely (a real bug this
+## file's own layout test caught: "0000's info chip extends past the
+## canvas bounds"). §4.1 already carves out a vertical exception for
+## 0000 ("the one node whose chip goes above it... left runs off
+## canvas" - its own words) but doesn't resolve the horizontal case;
+## clamping is the minimal fix that keeps the chip attached to its node
+## everywhere else (every other node sits far enough from both edges
+## that the clamp never engages).
+static func chip_rect_for(coordinate: String, state: String) -> Rect2:
+	var pos := _screen_pos(coordinate)
+	var radius := node_radius_for_state(state)
+	var above := coordinate == StarChart.START
+	var chip_y := (pos.y - radius - 8.0 - CHIP_HEIGHT) if above else (pos.y + radius + 8.0)
+	var chip_x := clampf(pos.x - CHIP_WIDTH / 2.0, 0.0, StarMapTokens.CANVAS_SIZE.x - CHIP_WIDTH)
+	return Rect2(chip_x, chip_y, CHIP_WIDTH, CHIP_HEIGHT)
 
 # --- glow layer (§4) - behind everything else, incl. the bands/edges ------
 
@@ -114,7 +142,7 @@ func _draw_bands() -> void:
 	var band_top := StarMapTokens.Y_MAP_TOP
 	var band_height := StarMapTokens.Y_MAP_BOTTOM - StarMapTokens.Y_MAP_TOP
 	var label_font := WolfAttackTokens.font("T_BAND_GUTTER")
-	var label_size := WolfAttackTokens.font_size("T_BAND_GUTTER")
+	var label_size := StarMapTokens.FONT_SIZE_BAND_LABEL
 	for i in tiers.size():
 		var x0: float = bounds[i]
 		var x1: float = bounds[i + 1]
@@ -159,8 +187,12 @@ static func _edge_key(a: String, b: String) -> String:
 ## to be a direct edge.
 func _draw_trails() -> void:
 	var path_tree: Dictionary = view.get("path_tree", {})
+	# Font family/weight borrowed from WolfAttackTokens' T_CHIP token,
+	# but NOT its size (17px) - that was tuned for the Wolf Attack
+	# screen's own budget and is under this screen's own §1 "no text
+	# below 18px" rule. Real bug, found by tests/test_star_map_layout.gd.
 	var label_font := WolfAttackTokens.font("T_CHIP")
-	var label_size := WolfAttackTokens.font_size("T_CHIP")
+	var label_size := StarMapTokens.FONT_SIZE_EDGE_LABEL
 	for branch: Dictionary in (path_tree.get("branches", []) as Array):
 		var nodes: Array = branch["nodes"]
 		var is_dead: bool = branch["state"] == "dead"
@@ -252,7 +284,7 @@ func _draw_nodes() -> void:
 		var state: String = node["state"]
 		var node_class: String = String(node.get("class", ""))
 		var is_large: bool = state == "visited" or state == "occupied"
-		var radius: float = StarMapTokens.NODE_RADIUS_LARGE if is_large else StarMapTokens.NODE_RADIUS_SMALL
+		var radius: float = node_radius_for_state(state)
 		var is_wolf: bool = node_class == "wolf" and is_large
 
 		var fill: Color
@@ -285,11 +317,11 @@ func _draw_nodes() -> void:
 		if is_large:
 			var letter: String = String(node.get("letter", ""))
 			var letter_colour := Color("#FF8375") if is_wolf else StarMapTokens.TEXT_PRIMARY
-			draw_string(letter_font, Vector2(pos.x - radius, pos.y + 15.0), letter, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 42, letter_colour)
+			draw_string(letter_font, Vector2(pos.x - radius, pos.y + 15.0), letter, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, StarMapTokens.FONT_SIZE_LETTER, letter_colour)
 		else:
-			draw_string(coord_font, Vector2(pos.x - radius, pos.y + 8.0), coordinate, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 24, Color("#7E8EA6"))
+			draw_string(coord_font, Vector2(pos.x - radius, pos.y + 8.0), coordinate, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, StarMapTokens.FONT_SIZE_COORD, Color("#7E8EA6"))
 
-		_draw_info_chip(node, pos, radius, chip_font)
+		_draw_info_chip(node, chip_font)
 
 ## Corner-bracket locator (§4.2) - static at rest scale, no pulse. See
 ## this file's header note on why the animation itself is deferred.
@@ -311,15 +343,13 @@ func _draw_locator(center: Vector2, colour: Color) -> void:
 ## the one node whose chip goes above, per §4.1's own explicit
 ## exception. Claim text is rail-only (design-handoff override #2) -
 ## the map keeps only a claim *count*, dashed.
-func _draw_info_chip(node: Dictionary, pos: Vector2, radius: float, font: Font) -> void:
+func _draw_info_chip(node: Dictionary, font: Font) -> void:
 	var state: String = node["state"]
 	if state != "visited" and state != "occupied" and state != "reported":
 		return
 
 	var coordinate: String = node["id"]
-	var above := coordinate == StarChart.START
-	var chip_height := 26.0
-	var chip_y := (pos.y - radius - 8.0 - chip_height) if above else (pos.y + radius + 8.0)
+	var rect := chip_rect_for(coordinate, state)
 
 	var text: String
 	var colour: Color
@@ -338,14 +368,12 @@ func _draw_info_chip(node: Dictionary, pos: Vector2, radius: float, font: Font) 
 		colour = StarMapTokens.TEXT_PRIMARY
 		text = "%s · %s" % [coordinate, String(node.get("short_name", node.get("name", "")))]
 
-	var width := 260.0
-	var rect := Rect2(pos.x - width / 2.0, chip_y, width, chip_height)
 	draw_rect(rect, Color(0.03, 0.04, 0.08, 0.85))
 	if dashed:
 		_draw_dashed_rect(rect, colour, 1.0)
 	else:
 		draw_rect(rect, colour, false, 1.0)
-	draw_string(font, Vector2(rect.position.x, chip_y + chip_height - 8.0), text, HORIZONTAL_ALIGNMENT_CENTER, width, 20, colour)
+	draw_string(font, Vector2(rect.position.x, rect.position.y + rect.size.y - 8.0), text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, StarMapTokens.FONT_SIZE_CHIP, colour)
 
 static func _claims_disagree(claims: Array) -> bool:
 	if claims.size() < 2:
@@ -365,7 +393,7 @@ static func _claims_disagree(claims: Array) -> bool:
 ## confirmed by diff, so this doesn't need a second preload list).
 func _draw_group_tokens() -> void:
 	var abbr_font := WolfAttackTokens.font("T_SEC")
-	var abbr_size := WolfAttackTokens.font_size("T_SEC")
+	var abbr_size := StarMapTokens.FONT_SIZE_TOKEN_ABBR
 
 	for group: Dictionary in (view.get("groups", []) as Array):
 		var pos := _screen_pos(String(group["at"])) + Vector2(TOKEN_RADIUS + 14.0, -(TOKEN_RADIUS + 14.0))
@@ -436,4 +464,4 @@ func _draw_legend() -> void:
 				_draw_dashed_line(swatch + Vector2(-10, 0), swatch + Vector2(10, 0), colour, 2.0, 2.0, 3.0)
 			"dashed_arc":
 				_draw_dashed_line(swatch + Vector2(-10, -4), swatch + Vector2(10, 4), colour, 2.0, 4.0, 3.0)
-		draw_string(font, Vector2(x0 + 26.0, y + 6.0), String(item["label"]), HORIZONTAL_ALIGNMENT_LEFT, slot - 30.0, 18, StarMapTokens.TEXT_SECONDARY)
+		draw_string(font, Vector2(x0 + 26.0, y + 6.0), String(item["label"]), HORIZONTAL_ALIGNMENT_LEFT, slot - 30.0, StarMapTokens.FONT_SIZE_LEGEND, StarMapTokens.TEXT_SECONDARY)

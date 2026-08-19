@@ -105,6 +105,14 @@ const CHART_ASSIGNMENTS: Dictionary[String, Dictionary] = {
 ## file's own "coordinate_space" note for the rotation convention ui/
 ## applies (paper rotated 90° clockwise: screen x from u, screen y from
 ## v - docs/star_map_tv_display.md §5.1).
+##
+## Not what actually drives the TV screen's rendering any more -
+## ui/tv/star_map/star_map_tokens.gd's NODE_PIXEL_POSITION is the exact
+## worked pixel table from the visual redesign handoff, used directly
+## per that spec's own "use those, don't re-derive" instruction. Kept
+## here as correct, independently-sourced topology data (still tested,
+## still potentially useful for anything that isn't pixel-exact
+## rendering), not as dead code.
 const NODE_POSITION: Dictionary[String, Vector2] = {
 	"0000": Vector2(0.0, 0.509),
 	"1413": Vector2(0.1198, 0.6372),
