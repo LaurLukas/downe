@@ -1887,3 +1887,143 @@ and the content-aware sizing fix from this session's overlap bug (the
 ladder's cell row will need the same "measure the real font metric,
 don't guess a fixed height" treatment `_build_full_token()` now uses,
 given it's replacing the exact row that bug came from).
+
+## New — Star Map TV display (not started)
+
+Two docs landed for this: `docs/star_map_tv_display.md` (the full spec -
+purpose, hard constraints, layout, rendering layers, data contract, host
+controls, Godot file structure, open questions) and `docs/star_charts.json`
+(companion topology/letter/system data, written to ship as
+`res://data/star_charts.json`). Read the spec directly before starting -
+this entry is a pointer plus a reconciliation check against existing code,
+not a substitute. Unlike every other entry in this file, nothing for this
+feature has been built yet - no `core/map/`, no `ui/tv/star_map/`, no
+`ui/admin/`.
+
+### Overlap with existing code — reconcile before building
+
+`core/star_chart.gd` already exists (built during the earlier Star systems
+pass) and already covers most of what the spec's proposed
+`core/map/star_chart.gd` asks for: the same 22-node/41-edge graph
+(verified identical, edge-for-edge, against `docs/star_charts.json`'s
+`edges` array), `PURSUIT_BAND` (coordinate → cumulative pursuit reduction,
+-1 through -7 by tier depth), and `CHART_ASSIGNMENTS` for all three chart
+letter variants. Building a second, separate `core/map/star_chart.gd` per
+the spec's file layout would duplicate this - extend the existing file (and
+decide whether it physically moves under `core/map/` to match the spec's
+layout) rather than writing a new one from scratch.
+
+**A real bug, found by cross-checking `docs/star_charts.json` against the
+existing, already-shipped, already symmetry-tested `core/star_chart.gd`**:
+`CHART_ASSIGNMENTS["A"]["1964"]` is `"P"` - it should be `"M"`. Chart A's
+own letter tally in the existing file currently has two `P`s (`1964` and
+`4888`) and only three `M`s, but `docs/star_charts.json`'s
+`variant_summary.A` says chart A has exactly 8 wolf systems (4 L + 4 M) and
+exactly one each of N/O/P (P at `4888` only) - and every other node's
+letter, on every other node across all three charts, matches exactly
+between the two sources. Changing `1964` from `P` to `M` makes chart A's
+tally match the JSON's variant summary precisely. The existing
+`tests/core/star_chart_test.gd` symmetry test wouldn't have caught this -
+it checks graph symmetry, not per-chart letter-count invariants. Worth
+fixing directly and adding a letter-tally-per-variant test so this class of
+bug can't recur silently. Not fixed here since it's game content, not
+plumbing - flagging for confirmation rather than guessing, per this
+project's own established pattern for anything touching printed source
+material.
+
+### What's needed to build the spec
+
+- [ ] Reconcile/extend `core/star_chart.gd` per the bug and layout note
+      above.
+- [ ] `core/map/fleet_positions.gd` — genuinely new. Nothing in `core/`
+      today tracks which chart node a ship is actually at, or its move
+      history. `Ship.jump_coordinates` (`core/ship.gd`) is free text typed
+      by a scout - the deliberately unvalidated field CLAUDE.md constraint
+      1 protects - and is not the same thing as "the fleet's real current
+      node." Conflating the two would be exactly the leak/auto-verification
+      the spec's C1/C2 forbid. This needs its own state, mutated only
+      through the host's "Move unit" control (§8), never derived from what
+      a scout typed.
+- [ ] `core/map/path_tree.gd` — prefix tree over per-unit trails → the
+      branch list §6.3 describes. New.
+- [ ] `core/map/star_map_projection.gd` — the C2 leak boundary
+      (`build()` strips unvisited letters at the source, not in the
+      renderer). New. Its leak tests are the load-bearing tests for this
+      whole feature - write `test_star_map_projection.gd` first, same
+      order this project already followed for `WolfAttackView`'s leak
+      tests.
+- [ ] `core/map/reveal_state.gd` — visited set + claims list. New. Never
+      holds truth about an unvisited node.
+- [ ] **Split-fleet pursuit is a real data-model gap, not just a display
+      gap.** `GameState` holds exactly one `pursuit_track`
+      (`core/game_state.gd:15`), and `JumpResolver.resolve()`
+      (`core/jump.gd:14-20`) always mutates that single track. The spec's
+      §4.2 is explicit, quoting the Facilitator Guide directly, that a
+      split fleet keeps independent pursuit per group - this is a `core/`
+      change, not a `core/map/` one, and needs a decision before
+      per-group pursuit can be built at all. Closest thing this feature
+      has to the Wolf Attack work's "needs a Wolf ship model that doesn't
+      exist yet" - a real prerequisite, not a nice-to-have.
+- [ ] `ui/tv/star_map/` scenes (`StarMapScreen`, `StarNode`, `TrailLayer`,
+      `GroupCard`, `ClaimChip`) — new, consumes the projection dict only,
+      per §9.
+- [ ] `ui/admin/StarMapAdmin.tscn/.gd` — ground-truth map + every host
+      control from §8 (move unit, undo, publish/retract claim, set group
+      label/pursuit/representative, toggle scout ring/jump range, set
+      destination, show/hide, force state). New - this is where CLAUDE.md
+      constraint 5 (host can override everything) actually lives for this
+      screen.
+- [ ] `res://data/star_charts.json` — copy/adapt `docs/star_charts.json`
+      into the runtime data path the spec's §9 file layout expects.
+      Existing `core/` precedent (`star_chart.gd`, `craft_definitions.gd`,
+      `star_system_definitions.gd`) hardcodes data as GDScript constants
+      rather than loading JSON at runtime - decide whether this feature
+      keeps that pattern (fold the JSON's content into the extended
+      `star_chart.gd` instead) or is the first thing in this project to
+      actually load a runtime data file, since the spec's file tree
+      assumes the latter.
+- [ ] Wire "map goes up automatically for 45s after a jump resolution,"
+      "on demand during Coordination Phase," "idle screen at 60%
+      brightness between phases," and "never during a Wolf Attack" (§8)
+      into `ui/main.gd`, alongside the already-built
+      `TVDisplay`/`WolfAttackDisplay` visibility-swap pattern - this
+      becomes a three-way swap, not two.
+- [ ] Test files per the spec's §9 list: extend
+      `tests/core/star_chart_test.gd` rather than duplicating it (it
+      already exists), then new `test_path_tree.gd`,
+      `test_star_map_projection.gd` (the important one - see above), and
+      `test_split_fleet.gd` (needs the pursuit-per-group model above
+      first).
+
+### Blockers — resolve before implementing trails (spec's own §10, items 1-3)
+
+1. Short/medium/long jump = hop count on the chart - **already resolved**
+   per the spec itself (§6.7), and already consistent with `core/`'s
+   existing `PURSUIT_BAND` cumulative-per-tier data (see the -1..-7 table
+   above) even though nothing wires that data up yet.
+2. **Does pursuit fall by 1 per jump, or by 1 per tier crossed?** The
+   spec calls this its top blocker. Worth knowing: `core/star_chart.gd`'s
+   existing `PURSUIT_BAND` already encodes the "cumulative running total"
+   answer (-1 through -7 by tier depth, matching the printed band labels)
+   - but `JumpResolver.resolve()` never reads it, it just calls
+   `pursuit_track.fall()` with a flat default of `1` regardless of
+   distance. So the data already assumes the reading the spec is asking
+   about; the resolver simply doesn't use it yet. Confirm the reading,
+   then wire `JumpResolver` to `StarChart.pursuit_reduction_at()` instead
+   of a flat `fall()` - this is arithmetic the engine should already be
+   doing and currently isn't.
+3. **Pursuit reconciliation on group merge** — spec's own answer is a
+   host prompt (safe default). Needs the split-fleet pursuit model above
+   to exist first; not otherwise blocking.
+
+Open question 6 (system E's reward printing "code W1 or W2," which
+doesn't match any real system letter) reads as still-open in the spec, but
+**is already resolved** elsewhere in this file - see "Done — Star systems"
+above: replaced with a reward that reveals the location of the real Wolf
+systems L and M instead, confirmed with the user at the time. The spec's
+own open questions 4, 5, 7, 8, 9 (scout claims on TV vs. admin-only,
+Voyage 33-0's signature colour, the missing -5 band label being a
+print-file fix, re-scouting stacking vs. replacing, how long dead branches
+persist) are all lower priority per the spec's own framing - "easy to
+change either way," worth a look at first playtest rather than deciding
+now.
