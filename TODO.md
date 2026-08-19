@@ -2370,7 +2370,7 @@ persist) are all lower priority per the spec's own framing - "easy to
 change either way," worth a look at first playtest rather than deciding
 now.
 
-## Backlog — Star Map TV visual redesign (data layer, map, and rail all built - polish remains)
+## Backlog — Star Map TV visual redesign (essentially complete - one small badge left)
 
 A full design handoff arrived at `res://ui/design_handoff_star_map/` -
 same pattern as the Wolf Attack lane-layout handoff earlier in this file
@@ -2486,19 +2486,69 @@ the numbers will not be seen."*
    projection tests (no damage by default, one damaged member reported,
    `voyage_33_0` never flagged).
 
-   **Not built**: the animated pulse ring itself (drawn as a static ring
-   at rest scale instead - same "structural now, Tween later" call
-   already made for the Wolf Attack screen's v1 pass), and the token's
-   index disc (a map-to-rail-card link badge - the rail redesign below
-   now has real index numbers on each card to link *to*, so this is
-   buildable, just not done yet).
+   **Follow-up pass: the animated pulse ring and real collision
+   avoidance both built too** (the two items this whole priority-2 entry
+   used to flag as deferred - only the token's index disc, below, is
+   still open):
+   - **Pulse ring** (§4.2) - `StarMapCanvas` gained `_process(delta)`,
+     advancing a `_pulse_time` clock and calling `queue_redraw()` every
+     frame (this Control already redraws continuously whenever a `view`
+     is set, matching every other always-live TV element, so this is
+     one more thing driving that existing redraw rather than new
+     infrastructure). `_draw_locator()` derives the ring's radius
+     (60→69.6px) and alpha (0.55→0.10) from a sine wave over that clock
+     - an *approximation* of "2.4s ease-in-out", not a `Tween` using
+     Godot's actual `TRANS_SINE`/`EASE_IN_OUT` curve, which would track
+     the spec's literal wording more exactly. Verified the clock
+     actually advances frame-to-frame against the real running scene
+     (not just that the code compiles) with a driving script.
+   - **Collision avoidance** (§4.1/§4.3) - two new pure resolver
+     functions, `_resolve_chip_rects()` and `_resolve_token_positions()`,
+     kept separate from `chip_rect_for()` (which stays the simple,
+     pure, single-node default the layout tests already verify) since
+     resolving a collision is the one thing that genuinely needs to
+     know about every other element on screen at once. Chips get one
+     fallback step (§4.1's own "go lower-right diagonal, not sideways"
+     rule, clamped back on-canvas the same way the default already is);
+     tokens try upper-right, upper-left, lower-right, lower-left in
+     order (§4.3's "pushed to another quadrant"). Both fall back to the
+     default/first option if every alternative also collides, rather
+     than searching further - matching the spec's own one-step fallback,
+     not a general layout solver.
 
-   Verified against the real running scene with a driving script:
+     **Verified against the spec's own cited example, not an invented
+     one**: §4.3 says "fleet token above 1096 - the −45° slot collides
+     with 3068's claim chip." Hand-derived from the exact
+     `NODE_PIXEL_POSITION` table that this is a real collision at these
+     coordinates before writing the test, then confirmed
+     `_resolve_token_positions()` actually moves the token off its
+     default slot and clear of 3068's chip in exactly this scenario -
+     `test_group_token_avoids_a_colliding_neighbour_chip` in
+     `tests/ui/star_map_layout_test.gd`. A second test confirms the
+     common case (nothing colliding, most of the real 22-node chart at
+     real separations) still resolves to exactly the default position,
+     not a needlessly-shifted one.
+
+   **Still not built**: the token's index disc (a map-to-rail-card link
+   badge - the rail redesign now has real index numbers on each card to
+   link *to*, so this is buildable, just not done yet). **Still not
+   verifiable without a live window**: exact pixel *feel* for both of
+   the above - the collision avoidance picks a provably correct
+   non-overlapping slot, but "measure it" (§4.1's own words) means eyes
+   on a real screen, and the pulse's sine approximation vs. a Tween's
+   real ease-in-out curve is a "close enough in code, judge on a TV"
+   distinction, same as everywhere else in this project's visual work.
+
+   Verified against the real running scene with driving scripts:
    damaged one of Icebreaker's real consoles, split it into its own
    group, and confirmed both `damaged_member_ids` and the rendered rail
    card's `ICEBREAKER (DAMAGED)` text came through correctly, while
-   AEGIS's own (undamaged) group card showed no such flag. Full test
-   suite green at 46 files (was 45).
+   AEGIS's own (undamaged) group card showed no such flag; separately,
+   confirmed the pulse clock advances over real frames and that the
+   1096/3068 collision scenario renders without error end to end. Full
+   test suite green at 46 files (was 45; 2 new collision-avoidance tests
+   landed in the existing `star_map_layout_test.gd` rather than adding a
+   47th file).
 3. [x] **Wolves are loud** (§4 node styling + glow layer) - built for the
    *map* half. Wolf nodes get the 5px `WOLF` ring + tinted fill + the
    radial glow. **The rail's Wolf Presence block (§6.2) is not built** -

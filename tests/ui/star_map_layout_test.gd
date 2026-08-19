@@ -212,6 +212,46 @@ func test_every_chip_position_is_closer_to_its_own_node_than_any_other() -> void
 				var other_distance := chip_center.distance_to(StarMapCanvas._screen_pos(other))
 				assert_true(own_distance < other_distance, "%s's %s-state info chip is not closer to its own node than to %s" % [coordinate, state, other])
 
+# --- collision avoidance (§4.1/§4.3) - resolve functions built alongside
+# these checks, not part of the original §11 list, but exercised here
+# since they're the same class of pure geometry.
+
+func test_chip_resolution_matches_the_default_when_nothing_collides() -> void:
+	var positions := FleetPositions.new()
+	positions.move_unit("aegis", "1413", 1)
+	var reveal := RevealState.new()
+	var view := StarMapProjection.build("A", 1, positions, reveal, {}, {})
+	var resolved := StarMapCanvas._resolve_chip_rects(view)
+	for coordinate: String in resolved:
+		var node: Dictionary = _node_by_id(view, coordinate)
+		var default_rect := StarMapCanvas.chip_rect_for(coordinate, String(node["state"]))
+		assert_eq(resolved[coordinate], default_rect, "%s's chip should sit at its default slot when nothing collides" % coordinate)
+
+func test_group_token_avoids_a_colliding_neighbour_chip() -> void:
+	# The spec's own cited collision (§4.3): "fleet token above 1096 -
+	# the -45 slot collides with 3068's claim chip." Confirmed by hand
+	# against the exact NODE_PIXEL_POSITION table before writing this
+	# test - 1096's default upper-right token rect and 3068's default
+	# below-node chip rect do overlap at these real coordinates.
+	var positions := FleetPositions.new()
+	positions.move_unit("aegis", "1096", 1)
+	var reveal := RevealState.new()
+	reveal.publish_claim("3068", "a claim", "STARLIGHT", 1) # unvisited + a claim -> "reported", chip shown
+	var view := StarMapProjection.build("A", 1, positions, reveal, {}, {})
+
+	var chip_rects := StarMapCanvas._resolve_chip_rects(view)
+	var token_positions := StarMapCanvas._resolve_token_positions(view, chip_rects)
+
+	var default_token_pos := StarMapCanvas._screen_pos("1096") + Vector2(StarMapCanvas.TOKEN_RADIUS + 14.0, -(StarMapCanvas.TOKEN_RADIUS + 14.0))
+	var group_id: String = (view["groups"] as Array)[0]["id"]
+	var resolved_pos: Vector2 = token_positions[group_id]
+	assert_true(resolved_pos != default_token_pos, "the token should move off its default upper-right slot when it collides with a neighbour's chip")
+
+	var half := Vector2(StarMapCanvas.TOKEN_RADIUS, StarMapCanvas.TOKEN_RADIUS)
+	var resolved_rect := Rect2(resolved_pos - half, half * 2.0)
+	var chip_3068: Rect2 = chip_rects["3068"]
+	assert_true(not resolved_rect.intersects(chip_3068), "the resolved token position should no longer overlap 3068's chip")
+
 # --- check 5: no text element renders below 18px ----------------------------
 
 func test_no_font_size_below_minimum() -> void:
