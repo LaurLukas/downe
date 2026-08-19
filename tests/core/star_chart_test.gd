@@ -93,6 +93,16 @@ func test_pursuit_reduction_matches_band() -> void:
 	assert_eq(StarChart.pursuit_reduction_at("5143"), -1, "5143 is in the -1 band")
 	assert_eq(StarChart.pursuit_reduction_at("4888"), -7, "4888 is in the -7 band")
 
+func test_every_coordinate_has_a_node_position() -> void:
+	for coordinate: String in StarChart.all_coordinates():
+		var position := StarChart.node_position(coordinate)
+		assert_true(position.x >= 0.0 and position.x <= 1.0, "%s's u should be in [0,1], got %f" % [coordinate, position.x])
+		assert_true(position.y >= 0.0 and position.y <= 1.0, "%s's v should be in [0,1], got %f" % [coordinate, position.y])
+
+func test_node_position_matches_docs_star_charts_json() -> void:
+	assert_eq(StarChart.node_position("0000"), Vector2(0.0, 0.509), "0000's position should match docs/star_charts.json")
+	assert_eq(StarChart.node_position("4888"), Vector2(0.9279, 0.9744), "4888's position should match docs/star_charts.json")
+
 ## Regression guard for a real transcription bug: chart A's "1964" was
 ## originally "P" (a duplicate of "4888"), giving chart A only 3 M's and
 ## 2 P's. docs/star_charts.json's variant_summary confirms the correct

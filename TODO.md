@@ -1888,7 +1888,7 @@ ladder's cell row will need the same "measure the real font metric,
 don't guess a fixed height" treatment `_build_full_token()` now uses,
 given it's replacing the exact row that bug came from).
 
-## In progress — Star Map TV display (core/map/ done, ui/ not started)
+## In progress — Star Map TV display (core/map/ + TV screen done, admin console not started)
 
 Two docs landed for this: `docs/star_map_tv_display.md` (the full spec -
 purpose, hard constraints, layout, rendering layers, data contract, host
@@ -1901,8 +1901,12 @@ not a substitute.
 The full headless `core/map/` layer is built and tested (see below) -
 `fleet_positions.gd`, `path_tree.gd`, `star_map_projection.gd`,
 `reveal_state.gd`, plus the split-fleet pursuit model and the two
-blockers under "Blockers" further down. Nothing under `ui/tv/star_map/`
-or `ui/admin/` exists yet - that's the real remaining work.
+blockers under "Blockers" further down. The TV screen itself
+(`ui/tv/star_map/`) is built too, structural pass, reachable via one new
+`HostConsole` button - see that entry below for what's still deferred
+(visual polish, the richer auto-show/idle timing policy). Nothing under
+`ui/admin/` exists yet - the actual host controls (move unit, claims,
+representative, etc.) are the real remaining work.
 
 ### Overlap with existing code — reconcile before building
 
@@ -2108,11 +2112,95 @@ bug can't recur silently. Full suite still green (39 files).
       scenarios by hand before writing each test, rather than writing
       tests only after the code already passed them.
 
-- [ ] `ui/tv/star_map/` scenes (`StarMapScreen`, `StarNode`, `TrailLayer`,
-      `GroupCard`, `ClaimChip`) — new, consumes the projection dict only,
-      per §9. Natural next step - `StarMapProjection` now produces
-      everything these need except scout_rings/jump_ranges/highlight
-      (see above).
+- [x] **`ui/tv/star_map/` - built, structural pass.** `StarMapScreen.tscn/
+      .gd` + `StarMapCanvas.gd` (one `_draw()`-based Control doing bands/
+      edges/trails/nodes/group tokens/claim chips, matching this
+      project's established Wolf Attack screen pattern of small
+      draw-only helper Controls - `PursuitMeter`, `ImpactArc`,
+      `LaneSpines`), consuming `StarMapProjection.build()`'s dict only.
+      Read-only like `TVDisplay`/`WolfAttackDisplay` - never mutates
+      `core/` state, rebuilds freely on every `GameState.mutated` since
+      there's no editable input here to interrupt.
+
+      Same structural-pass scoping already applied to the Wolf Attack
+      screen's v1 build (see that section's own note above, and this
+      file's header comment): correct data/geometry using plain drawing
+      primitives, not the spec's pixel-exact node radii, draw-in
+      animation, dashed-chip styling, or slow occupied-node pulse -
+      those need a human looking at a live window to judge, which this
+      environment can't do. Not split into the spec's more granular
+      `StarNode.tscn`/`TrailLayer.gd`/`GroupCard.tscn`/`ClaimChip.tscn`
+      file breakdown - one canvas draws nodes/trails together (band
+      boundaries and trail liveness both key off the same per-node data
+      already in hand) and group cards are built as plain `VBoxContainer`
+      rows in `star_map_screen.gd`, same relationship `TVDisplay`'s
+      fleet-status rows already have to their `.gd` file.
+
+      **New `core/star_chart.gd` data**: `NODE_POSITION` (per-coordinate
+      u/v screen-layout position, sourced from `docs/star_charts.json`'s
+      pixel-analysis node table) and `node_position()` - genuinely
+      missing before this; nothing anywhere had screen positions for the
+      22 nodes. 2 new tests in `tests/core/star_chart_test.gd`.
+
+      **New `GameState.chart_in_play`** (`"A"`/`"B"`/`"C"`, defaults
+      `"A"`, persisted): the screen needs to know which chart variant is
+      in play to resolve letters at all, and nothing tracked this
+      before. `set_chart_in_play()` exists as the setter; no admin
+      control calls it yet (see `ui/admin/StarMapAdmin` below) - it just
+      sits at the default until that's built.
+
+      **Bands/trails are derived, not hardcoded**, per spec §6.1's own
+      instruction: tier boundaries come from `StarChart.
+      pursuit_reduction_at()` grouped by each tier's actual node
+      x-positions, not fixed pixel values; a branch renders as a straight
+      line when its endpoints are a real `StarChart` graph edge, and as a
+      dashed bowed quadratic arc (manually interpolated, not
+      `Vector2.bezier_interpolate` - avoided an unverified API surface
+      given this project's history of exactly that kind of Godot-API
+      assumption breaking a build, see the Wolf Attack v3 section above)
+      when they aren't - a multi-hop jump or host correction stays
+      visually distinct from a normal one-hop trail, per §6.3.
+
+      **Reachable end to end, not just instantiated**: `HostConsole`
+      gained one new button ("Show Star Map (TV)", `star_map_toggle_
+      pressed` signal) - deliberately the *minimum* reachable trigger,
+      not the full `ui/admin/StarMapAdmin` this file's next item still
+      asks for. `ui/main.gd` now instantiates and wires `StarMapScreen`
+      as a third TV-window child alongside `TVDisplay`/
+      `WolfAttackDisplay`, extending the existing visibility-swap
+      pattern to three screens: `WolfAttackDisplay` still has absolute
+      priority the instant an attack starts (constraint 3 / spec §8's
+      "never during a Wolf Attack"); otherwise the toggle picks
+      `TVDisplay` or `StarMapScreen`. **Not built**: the richer §8 show/
+      hide policy (auto-show for 45s after a jump resolution, idle at
+      60% brightness between phases) - that needs turn/jump-event timing
+      nothing tracks yet and is a real separate piece of work, not
+      something to fake with a `Timer` node guessing at the right
+      trigger.
+
+      Verified against the real running app three ways: a throwaway
+      driving script (deliberately not committed, same pattern as every
+      other TV-screen verification in this project) instantiated the
+      real scene against a fresh fleet, confirmed 22 nodes and 1 group
+      card build correctly, moved a unit and confirmed the group card
+      list and canvas view both picked up the resulting split (2 groups)
+      on the next `GameState.mutated`, published a claim on an unvisited
+      node and confirmed it read `"reported"` with no `letter` key
+      anywhere in the projection reaching the canvas, and forced a
+      `_draw()` redraw pass at every stage to confirm the drawing code
+      itself doesn't crash on real data (a real, if minor, timing bug
+      was caught this way first - setting `.game_state` in the same
+      call as `add_child()` hit `@onready` vars before `_ready()` had
+      run; fixed by awaiting a frame first, matching `ui/main.gd`'s own
+      already-documented "`add_child()` first" ordering rule). Separately
+      booted the real `Main` scene headlessly
+      (`godot --headless res://ui/main.tscn`) with all three TV screens
+      and the new host-console button wired, confirmed no script errors
+      and the process stays running rather than crashing. Full test
+      suite still green (43 files - 2 new tests landed in the existing
+      `star_chart_test.gd` for `NODE_POSITION`; no new test files, since
+      `ui/` scenes aren't unit-tested in this project's suite - same
+      reason `HostConsole`'s own panels have no test file either).
 - [ ] `ui/admin/StarMapAdmin.tscn/.gd` — ground-truth map + every host
       control from §8 (move unit, undo, publish/retract claim, set group
       label/pursuit/representative, toggle scout ring/jump range, set
@@ -2121,7 +2209,9 @@ bug can't recur silently. Full suite still green (39 files).
       screen. Every setter this needs already exists on `FleetPositions`/
       `RevealState` - this is now "just" wiring a UI to calls that already
       work, the same relationship `HostConsole`'s ship panels have to
-      `Ship`'s setters.
+      `Ship`'s setters. `HostConsole`'s new "Show Star Map" button (above)
+      covers only the "show/hide" line of §8's control table - the other
+      nine rows are still unbuilt.
 - [ ] `res://data/star_charts.json` — copy/adapt `docs/star_charts.json`
       into the runtime data path the spec's §9 file layout expects.
       Existing `core/` precedent (`star_chart.gd`, `craft_definitions.gd`,
@@ -2131,12 +2221,6 @@ bug can't recur silently. Full suite still green (39 files).
       `star_chart.gd` instead) or is the first thing in this project to
       actually load a runtime data file, since the spec's file tree
       assumes the latter.
-- [ ] Wire "map goes up automatically for 45s after a jump resolution,"
-      "on demand during Coordination Phase," "idle screen at 60%
-      brightness between phases," and "never during a Wolf Attack" (§8)
-      into `ui/main.gd`, alongside the already-built
-      `TVDisplay`/`WolfAttackDisplay` visibility-swap pattern - this
-      becomes a three-way swap, not two.
 - [ ] `test_split_fleet.gd` from the spec's §9 list specifically (host
       reassigning a representative mid-game, a merge prompt scenario end
       to end) - most of what it would cover is already exercised by

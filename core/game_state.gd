@@ -18,6 +18,17 @@ var announcement_log := AnnouncementLog.new()
 var fleet_positions := FleetPositions.new()
 var reveal_state := RevealState.new()
 
+## "A", "B", or "C" - which organiser chart's letter assignment is in
+## play (docs/star_map_tv_display.md §3.1/§8). Host-set at setup,
+## changeable mid-game "with a confirm" per §8 - the confirm prompt is
+## host-console UI, not modeled here; this is just the value it writes
+## to.
+var chart_in_play: String = "A"
+
+func set_chart_in_play(chart: String) -> void:
+	chart_in_play = chart
+	mutated.emit()
+
 ## Null except during an active attack - CLAUDE.md constraint 3: Wolf
 ## Attacks stay a physical gathering, so this only exists when the host
 ## has actually started one, and goes away the moment they end it.
@@ -146,6 +157,7 @@ func to_dict() -> Dictionary:
 		star_system_dict[letter] = star_systems[letter].to_dict()
 	return {
 		"pursuit_track": pursuit_track.to_dict(),
+		"chart_in_play": chart_in_play,
 		"turn": turn_manager.to_dict(),
 		"rng_seed": rng.seed,
 		"ships": ship_dict,
@@ -221,6 +233,7 @@ static func from_dict(data: Dictionary) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = int(data.get("rng_seed", state.rng.seed))
 	state.pursuit_track.load_from_dict(data.get("pursuit_track", {}))
+	state.chart_in_play = String(data.get("chart_in_play", "A"))
 	state.fleet_positions.load_from_dict(data.get("fleet_positions", {}))
 	state.reveal_state.load_from_dict(data.get("reveal_state", {}))
 	state.announcement_log.load_from_dict(data.get("announcement_log", {}))

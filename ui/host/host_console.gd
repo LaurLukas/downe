@@ -19,8 +19,16 @@ extends Control
 ## expanded (or via the top "Refresh" button) - a deliberate host
 ## action, not a background event.
 
+## Minimal reachable trigger for the Star Map TV screen (docs/
+## star_map_tv_display.md §8's "Show / hide map" - the rest of §8's
+## admin console, move unit/claims/representative/etc., is still
+## unbuilt; see TODO.md). ui/main.gd owns the actual show/hide policy
+## (never during a Wolf Attack) - this just asks for it.
+signal star_map_toggle_pressed()
+
 @onready var _turn_label: Label = %TurnLabel
 @onready var _advance_button: Button = %AdvanceButton
+@onready var _toggle_star_map_button: Button = %ToggleStarMapButton
 @onready var _pursuit_label: Label = %PursuitLabel
 @onready var _pursuit_override: SpinBox = %PursuitOverride
 @onready var _force_pursuit_button: Button = %ForcePursuitButton
@@ -57,6 +65,7 @@ func set_game_state(state: GameState) -> void:
 	_pursuit_override.min_value = PursuitTrack.MIN_VALUE
 	_pursuit_override.max_value = PursuitTrack.MAX_VALUE
 	_advance_button.pressed.connect(_on_advance_pressed)
+	_toggle_star_map_button.pressed.connect(func() -> void: star_map_toggle_pressed.emit())
 	_force_pursuit_button.pressed.connect(_on_force_pursuit_pressed)
 	_refresh_button.pressed.connect(_on_refresh_all_pressed)
 

@@ -97,6 +97,42 @@ const CHART_ASSIGNMENTS: Dictionary[String, Dictionary] = {
 	},
 }
 
+## Screen-layout position per node: u = depth from START (0 = start, 1 =
+## deepest tier), v = lateral position on the paper (0 = left edge, 1 =
+## right edge). Same for all three chart variants - only the letters
+## differ. Sourced from docs/star_charts.json's "nodes" array (pixel
+## analysis of the printed charts), not re-derived here - see that
+## file's own "coordinate_space" note for the rotation convention ui/
+## applies (paper rotated 90° clockwise: screen x from u, screen y from
+## v - docs/star_map_tv_display.md §5.1).
+const NODE_POSITION: Dictionary[String, Vector2] = {
+	"0000": Vector2(0.0, 0.509),
+	"1413": Vector2(0.1198, 0.6372),
+	"5143": Vector2(0.1937, 0.3038),
+	"0488": Vector2(0.2595, 0.8231),
+	"6837": Vector2(0.282, 0.5064),
+	"9997": Vector2(0.3126, 0.1077),
+	"6931": Vector2(0.4099, 0.3141),
+	"4454": Vector2(0.4369, 0.7026),
+	"1096": Vector2(0.5414, 0.441),
+	"4753": Vector2(0.564, 0.141),
+	"6964": Vector2(0.564, 0.8795),
+	"3068": Vector2(0.6676, 0.2782),
+	"6943": Vector2(0.6676, 1.0),
+	"0853": Vector2(0.6892, 0.6385),
+	"2580": Vector2(0.7108, 0.0),
+	"1964": Vector2(0.7946, 0.8462),
+	"6798": Vector2(0.8216, 0.1141),
+	"8378": Vector2(0.8459, 0.541),
+	"4888": Vector2(0.9279, 0.9744),
+	"1380": Vector2(0.9297, 0.009),
+	"1836": Vector2(0.9514, 0.3038),
+	"0408": Vector2(1.0, 0.6731),
+}
+
+static func node_position(coordinate: String) -> Vector2:
+	return NODE_POSITION.get(coordinate, Vector2.ZERO)
+
 static func all_coordinates() -> Array[String]:
 	var coordinates: Array[String] = [START]
 	coordinates.append_array(PURSUIT_BAND.keys())

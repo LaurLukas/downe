@@ -24,6 +24,10 @@ text = "Turn 1 - Team Phase"
 unique_name_in_owner = true
 text = "Advance Phase"
 
+[node name="ToggleStarMapButton" type="Button" parent="Scroll/VBoxContainer"]
+unique_name_in_owner = true
+text = "Show Star Map (TV)"
+
 [node name="PursuitRow" type="HBoxContainer" parent="Scroll/VBoxContainer"]
 
 [node name="PursuitLabel" type="Label" parent="Scroll/VBoxContainer/PursuitRow"]

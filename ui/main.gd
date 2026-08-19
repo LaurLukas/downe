@@ -22,6 +22,19 @@ var persistence: Persistence
 ## split exists.
 var _player_peer_ids: Dictionary[String, int] = {}
 
+## Which of TVDisplay/StarMapScreen is up when no Wolf Attack is active
+## - toggled from HostConsole's "Show Star Map" button
+## (star_map_toggle_pressed). docs/star_map_tv_display.md §8 specs a
+## richer policy (auto-show for 45s after a jump, idle at 60%
+## brightness between phases) that isn't built yet - this is just the
+## on-demand host toggle, the minimum needed to actually reach the
+## screen. See TODO.md.
+var _show_star_map := false
+
+var _tv_display: Control
+var _wolf_attack_display: Control
+var _star_map_screen: Control
+
 func _init() -> void:
 	# Crash recovery: if a previous run left a save behind, resume from
 	# it instead of starting a fresh fleet. See CLAUDE.md's Persistence
@@ -54,6 +67,7 @@ func _ready() -> void:
 	var host_console := preload("res://ui/host/host_console.tscn").instantiate()
 	add_child(host_console)
 	host_console.set_game_state(game_state)
+	host_console.star_map_toggle_pressed.connect(_on_star_map_toggle_pressed)
 
 	var tv_window := Window.new()
 	tv_window.title = "Downe - TV Display"
@@ -84,22 +98,36 @@ func _ready() -> void:
 	tv_window.add_child(tv_display)
 	var wolf_attack_display := preload("res://ui/tv/wolf_attack_display.tscn").instantiate()
 	tv_window.add_child(wolf_attack_display)
+	var star_map_screen := preload("res://ui/tv/star_map/star_map_screen.tscn").instantiate()
+	tv_window.add_child(star_map_screen)
 	add_child(tv_window)
 	tv_display.game_state = game_state
 	wolf_attack_display.game_state = game_state
+	star_map_screen.game_state = game_state
 
-	# Same TV window, two screens sharing it: WolfAttackDisplay takes
-	# over the instant a Wolf Attack starts and TVDisplay resumes the
-	# instant it ends. Toggled via visible, not swapped in/out of the
-	# tree, so animation/scroll state in either one survives a host
-	# flipping back and forth (e.g. checking pursuit mid-attack).
-	game_state.mutated.connect(func() -> void:
-		var attack_active := game_state.wolf_attack != null
-		wolf_attack_display.visible = attack_active
-		tv_display.visible = not attack_active
-	)
-	tv_display.visible = game_state.wolf_attack == null
-	wolf_attack_display.visible = game_state.wolf_attack != null
+	_tv_display = tv_display
+	_wolf_attack_display = wolf_attack_display
+	_star_map_screen = star_map_screen
+
+	# Three screens sharing one TV window: WolfAttackDisplay takes over
+	# the instant a Wolf Attack starts and whichever of TVDisplay/
+	# StarMapScreen was showing resumes the instant it ends (constraint
+	# 3 - the attack screen has absolute priority, matching
+	# docs/star_map_tv_display.md §8's "Never during a Wolf Attack").
+	# Toggled via visible, not swapped in/out of the tree, so scroll/draw
+	# state in any of them survives a host flipping back and forth.
+	game_state.mutated.connect(_update_tv_visibility)
+	_update_tv_visibility()
+
+func _on_star_map_toggle_pressed() -> void:
+	_show_star_map = not _show_star_map
+	_update_tv_visibility()
+
+func _update_tv_visibility() -> void:
+	var attack_active := game_state.wolf_attack != null
+	_wolf_attack_display.visible = attack_active
+	_star_map_screen.visible = not attack_active and _show_star_map
+	_tv_display.visible = not attack_active and not _show_star_map
 
 ## "identify_player" is transport bookkeeping (which socket belongs to
 ## which player), not a GameState mutation, so it's handled here rather
