@@ -1888,7 +1888,7 @@ ladder's cell row will need the same "measure the real font metric,
 don't guess a fixed height" treatment `_build_full_token()` now uses,
 given it's replacing the exact row that bug came from).
 
-## New — Star Map TV display (not started)
+## In progress — Star Map TV display (core/map/ done, ui/ not started)
 
 Two docs landed for this: `docs/star_map_tv_display.md` (the full spec -
 purpose, hard constraints, layout, rendering layers, data contract, host
@@ -1896,9 +1896,13 @@ controls, Godot file structure, open questions) and `docs/star_charts.json`
 (companion topology/letter/system data, written to ship as
 `res://data/star_charts.json`). Read the spec directly before starting -
 this entry is a pointer plus a reconciliation check against existing code,
-not a substitute. Unlike every other entry in this file, nothing for this
-feature has been built yet - no `core/map/`, no `ui/tv/star_map/`, no
-`ui/admin/`.
+not a substitute.
+
+The full headless `core/map/` layer is built and tested (see below) -
+`fleet_positions.gd`, `path_tree.gd`, `star_map_projection.gd`,
+`reveal_state.gd`, plus the split-fleet pursuit model and the two
+blockers under "Blockers" further down. Nothing under `ui/tv/star_map/`
+or `ui/admin/` exists yet - that's the real remaining work.
 
 ### Overlap with existing code — reconcile before building
 
@@ -1934,45 +1938,190 @@ bug can't recur silently. Full suite still green (39 files).
 
 - [~] Reconcile/extend `core/star_chart.gd` - the letter bug above is
       fixed; still open whether the file physically moves under
-      `core/map/` to match the spec's layout.
-- [ ] `core/map/fleet_positions.gd` — genuinely new. Nothing in `core/`
-      today tracks which chart node a ship is actually at, or its move
-      history. `Ship.jump_coordinates` (`core/ship.gd`) is free text typed
-      by a scout - the deliberately unvalidated field CLAUDE.md constraint
-      1 protects - and is not the same thing as "the fleet's real current
-      node." Conflating the two would be exactly the leak/auto-verification
-      the spec's C1/C2 forbid. This needs its own state, mutated only
-      through the host's "Move unit" control (§8), never derived from what
-      a scout typed.
-- [ ] `core/map/path_tree.gd` — prefix tree over per-unit trails → the
-      branch list §6.3 describes. New.
-- [ ] `core/map/star_map_projection.gd` — the C2 leak boundary
-      (`build()` strips unvisited letters at the source, not in the
-      renderer). New. Its leak tests are the load-bearing tests for this
-      whole feature - write `test_star_map_projection.gd` first, same
-      order this project already followed for `WolfAttackView`'s leak
-      tests.
-- [ ] `core/map/reveal_state.gd` — visited set + claims list. New. Never
-      holds truth about an unvisited node.
-- [ ] **Split-fleet pursuit is a real data-model gap, not just a display
-      gap.** `GameState` holds exactly one `pursuit_track`
-      (`core/game_state.gd:15`), and `JumpResolver.resolve()`
-      (`core/jump.gd:14-20`) always mutates that single track. The spec's
-      §4.2 is explicit, quoting the Facilitator Guide directly, that a
-      split fleet keeps independent pursuit per group - this is a `core/`
-      change, not a `core/map/` one, and needs a decision before
-      per-group pursuit can be built at all. Closest thing this feature
-      has to the Wolf Attack work's "needs a Wolf ship model that doesn't
-      exist yet" - a real prerequisite, not a nice-to-have.
+      `core/map/` to match the spec's layout. Left where it is for now -
+      every new `core/map/` file below just references the global
+      `StarChart` class name, which works regardless of which directory
+      the script lives in.
+- [x] **`core/map/fleet_positions.gd` - built.** Ground truth for all 7
+      jump-capable units' chart positions and trail history, mutated
+      only through `move_unit()`/`undo_last_move()` (§8's "Move unit"/
+      "Undo last move") - never derived from `Ship.jump_coordinates`,
+      which stays exactly what it always was (a scout's unvalidated,
+      possibly-lying free text), per constraint 1.
+
+      Groups (§4.2) are derived from current shared position every time
+      `groups()` is called, not stored as a partition - what persists
+      across a split/merge is each group's id/label/representative/
+      pursuit. Since every mutator moves exactly one unit per call, a
+      single relocation can only ever peel one unit off its old group
+      and/or land it on an already-occupied node - never a multi-way
+      split and multi-way merge at once - which is what keeps
+      `_relocate()` a tractable "reason about the one unit that moved"
+      function instead of a full partition-diff from scratch every
+      time.
+
+      **Split-fleet pursuit resolved as part of this, not separately**
+      (folding the item below into this one - building `fleet_positions.gd`
+      *is* the split-fleet pursuit model, they turned out to be the same
+      piece of work): a group's pursuit isn't a sticky "has this ever
+      diverged" flag - it's just "is this currently the only group."
+      `sync_global_pursuit(value)` (wired to `GameState.pursuit_track.
+      changed` in `core/game_state.gd`) only writes when exactly one
+      group exists; the moment a split makes that untrue, the resulting
+      groups are independently host-managed via `set_group_pursuit()`/
+      `reconcile_group_pursuit()` from then on; the moment everything
+      merges back into one group, that single group starts tracking the
+      legacy `GameState.pursuit_track` again automatically, with no
+      special "resume tracking" call needed anywhere. (First draft used
+      a sticky per-group boolean instead - caught as wrong by a test
+      that moves all 7 units to the same node one call at a time, the
+      way jumps are actually reported in real play: each individual
+      `move_unit()` call transiently splits and re-merges the fleet, so
+      a sticky flag would have permanently and silently stopped tracking
+      global pursuit after the *first* turn any two ships were reported
+      separately - see `test_fleet_relocating_one_unit_at_a_time_ends_
+      as_one_group_tracking_global_again` in
+      `tests/core/map/fleet_positions_test.gd`.)
+
+      Merge pursuit reconciliation matches §4.2/§8's "do not
+      auto-resolve": the absorbed group's pursuit is stashed on
+      `pending_merge_pursuits`, never averaged or discarded, until a host
+      calls `reconcile_group_pursuit()`. Representative selection follows
+      §4.1 exactly (AEGIS's group is always represented by AEGIS, no
+      exception - `set_group_representative()` refuses to reassign it
+      away; AEGIS's own departure from a group takes that group's
+      identity with it; a non-AEGIS group picks a representative via the
+      selection order and holds it for the group's life). `to_dict()`/
+      `load_from_dict()` follow the existing `Ship`/`StarSystem` pattern;
+      wired into `GameState.to_dict()`/`from_dict()` for crash recovery.
+      **Not yet in `to_public_dict()`** - the raw positions/trails aren't
+      actually secret (they're exactly what's printed on the blank paper
+      chart per §3), but nothing consumes them over the network yet, and
+      the leak-safe way to expose star map data is through
+      `StarMapProjection.build()` (below), not this raw dict - same
+      "wait for the thing that actually redacts it" reasoning as
+      `star_systems`'s existing exclusion.
+
+      16 tests in `tests/core/map/fleet_positions_test.gd`, all passing.
+- [x] **`core/map/path_tree.gd` - built.** Deduplicates every unit's
+      trail into the tree of *distinct* routes (§6.3): each tree edge is
+      drawn once no matter how many units' trails pass through it,
+      branches split only at a real fork, and a branch is "live" if any
+      unit's *current* position still descends from it, "dead"
+      otherwise. Static and stateless - takes plain trails +
+      unit→group_id + which group is AEGIS's, doesn't touch
+      `FleetPositions`/`GameState` directly, so it's independently
+      testable against synthetic data.
+
+      **Known, documented simplification**: a single unit backtracking
+      over its own trail (revisiting an already-placed node) reuses the
+      existing tree edge and just stops being "live" once that unit's
+      current position no longer descends from it, rather than getting a
+      second reverse copy of the same edge. This produces the same
+      dead/live result the spec's own worked example wants (an abandoned
+      detour renders as a dead stub) without needing to special-case
+      round-trips - verified directly by
+      `test_merge_produces_convergence_and_one_dead_abandoned_branch` in
+      `tests/core/map/path_tree_test.gd`, which reproduces that exact
+      scenario (one unit detours off the shared route and rejoins) and
+      checks the dead branch is emitted exactly once. 4 tests total,
+      covering the three cases §9 names by name (identical trails →one
+      branch; a divergent trail → fork sharing the prefix exactly once;
+      merge → convergence + one dead branch) plus a trivial root-only
+      case.
+- [x] **`core/map/star_map_projection.gd` - built, with the leak tests
+      written first.** The C2 boundary: `build()` strips every unvisited
+      node's `letter`/`name`/`class`/`consequence` at the source, keyed
+      off `FleetPositions` trails/positions directly (`is_visited`/
+      `is_occupied`), never off the display `state` string - so a host
+      "force state" override (§8, constraint 5) can change what's
+      *displayed* without ever becoming a path to leaking real content
+      for a node the fleet hasn't actually reached. Covered directly by
+      `test_forced_state_cannot_be_used_to_leak_a_letter` in
+      `tests/core/map/star_map_projection_test.gd`, alongside the leak
+      tests §9 asks for by name (only visited/occupied nodes carry
+      `letter`; the serialized JSON never contains an unvisited system's
+      name anywhere in the string; a claim on a node whose true letter is
+      `M` round-trips its text unchanged without ever attaching `class`).
+      8 tests total, all passing.
+
+      `class`/`consequence` per node are *derived* from
+      `StarSystemDefinition`'s existing flags (`is_new_eden_candidate`,
+      `triggers_wolf_attack_on_arrival`, `rating`, etc.), not a second
+      hand-typed table that could drift from `docs/star_charts.json`'s
+      `systems[letter].class` values - cross-checked by hand against all
+      13 card-based letters when this was written.
+
+      **Deliberately scoped down from the full §7 schema** - `scout_rings`,
+      `jump_ranges`, and `highlight` are left out. Each needs host-toggled
+      overlay state (which scout ring is on, which group has jump-range
+      shown, a set destination) that doesn't exist anywhere in `core/`
+      yet - natural follow-up once the admin console (below) exists to
+      actually set that state, not something to stub out blind.
+      `orientation`/`show_bands` (display prefs, not game state) are also
+      omitted for the same "nothing sets this yet" reason.
+
+      New `core/ship_colors.gd` - `docs/ship_colors.md` had a ready-to-use
+      `ShipColors` constants block written but never actually created as
+      a file; created now (verbatim from that doc) since
+      `_build_group()`'s representative colour needed a source, and the
+      doc's own note says this is safe to live in `core/` (pure colour
+      lookup, no Node dependency). `ui/tv/wolf_attack_tokens.gd` still
+      keeps its own separate copy of the same six values - reconciling
+      that duplicate is a separate, not-yet-done cleanup, noted in both
+      files.
+- [x] **`core/map/reveal_state.gd` - built.** Claims (host-published
+      scout reports, §6.4's chips - verbatim text, never parsed or
+      matched against `StarChart`, contradicting claims both kept rather
+      than resolved) and `forced_states` (§8's "Force state" escape
+      hatch, constraint 5). Deliberately does *not* store a "visited" set
+      - visited-ness is fully derivable from `FleetPositions` trails, so
+      storing it separately would just be a second place it could drift
+      from the truth. 6 tests in `tests/core/map/reveal_state_test.gd`.
+
+      Wired into `GameState` (`reveal_state` field, `to_dict()`/
+      `from_dict()`, `changed` bubbling to `mutated`) alongside
+      `fleet_positions` above; **not yet in `to_public_dict()`**, same
+      reasoning as `fleet_positions`.
+
+      All 4 new modules total 34 new tests; full suite is 43 test files,
+      all passing (was 39 before this pass). One non-obvious step
+      needed along the way and worth remembering for next time: adding
+      new `class_name` scripts under a brand-new subdirectory
+      (`core/map/`) isn't picked up by `godot --headless --script` on
+      its own - it uses the existing `.godot/global_script_class_cache.cfg`,
+      which only gets rebuilt by actually opening the project. Fixed by
+      running `godot --headless --editor --quit` once before the test
+      run; every SCRIPT ERROR the first attempt threw ("Identifier
+      'FleetPositions' not declared", `MessageRouter.new()` on unrelated
+      tests failing with "Nonexistent function 'new' in base 'GDScript'")
+      was this cache being stale, not a real bug in any new file - worth
+      trying this rebuild step first if a future session sees the same
+      symptom before assuming the new code is broken.
+
+      Verified two more ways beyond the test suite: booted the real
+      `Main` scene headlessly (`godot --headless res://ui/main.tscn`) and
+      confirmed it starts and keeps running with no script errors now
+      that `GameState` constructs `FleetPositions`/`RevealState` in
+      `_init()`; and manually traced `_relocate()`/`_merge_groups()`
+      against several split/merge/AEGIS-departs/two-non-AEGIS-groups-merge
+      scenarios by hand before writing each test, rather than writing
+      tests only after the code already passed them.
+
 - [ ] `ui/tv/star_map/` scenes (`StarMapScreen`, `StarNode`, `TrailLayer`,
       `GroupCard`, `ClaimChip`) — new, consumes the projection dict only,
-      per §9.
+      per §9. Natural next step - `StarMapProjection` now produces
+      everything these need except scout_rings/jump_ranges/highlight
+      (see above).
 - [ ] `ui/admin/StarMapAdmin.tscn/.gd` — ground-truth map + every host
       control from §8 (move unit, undo, publish/retract claim, set group
       label/pursuit/representative, toggle scout ring/jump range, set
       destination, show/hide, force state). New - this is where CLAUDE.md
       constraint 5 (host can override everything) actually lives for this
-      screen.
+      screen. Every setter this needs already exists on `FleetPositions`/
+      `RevealState` - this is now "just" wiring a UI to calls that already
+      work, the same relationship `HostConsole`'s ship panels have to
+      `Ship`'s setters.
 - [ ] `res://data/star_charts.json` — copy/adapt `docs/star_charts.json`
       into the runtime data path the spec's §9 file layout expects.
       Existing `core/` precedent (`star_chart.gd`, `craft_definitions.gd`,
@@ -1988,12 +2137,12 @@ bug can't recur silently. Full suite still green (39 files).
       into `ui/main.gd`, alongside the already-built
       `TVDisplay`/`WolfAttackDisplay` visibility-swap pattern - this
       becomes a three-way swap, not two.
-- [ ] Test files per the spec's §9 list: extend
-      `tests/core/star_chart_test.gd` rather than duplicating it (it
-      already exists), then new `test_path_tree.gd`,
-      `test_star_map_projection.gd` (the important one - see above), and
-      `test_split_fleet.gd` (needs the pursuit-per-group model above
-      first).
+- [ ] `test_split_fleet.gd` from the spec's §9 list specifically (host
+      reassigning a representative mid-game, a merge prompt scenario end
+      to end) - most of what it would cover is already exercised by
+      `fleet_positions_test.gd`'s split/merge/representative tests above;
+      revisit once the admin console exists to test the actual host-facing
+      flow rather than calling the setters directly.
 
 ### Blockers — resolve before implementing trails (spec's own §10, items 1-3)
 

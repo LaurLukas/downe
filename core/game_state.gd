@@ -15,6 +15,8 @@ var players: Dictionary[String, Player] = {}
 var pursuit_track := PursuitTrack.new()
 var turn_manager := TurnManager.new()
 var announcement_log := AnnouncementLog.new()
+var fleet_positions := FleetPositions.new()
+var reveal_state := RevealState.new()
 
 ## Null except during an active attack - CLAUDE.md constraint 3: Wolf
 ## Attacks stay a physical gathering, so this only exists when the host
@@ -49,7 +51,10 @@ func _init() -> void:
 	turn_manager.phase_changed.connect(func(_turn: int, _phase: TurnManager.Phase) -> void: mutated.emit())
 	turn_manager.advanced.connect(_on_advanced)
 	pursuit_track.changed.connect(func(_new_value: int) -> void: mutated.emit())
+	pursuit_track.changed.connect(fleet_positions.sync_global_pursuit)
 	announcement_log.entry_added.connect(func(_entry: Dictionary) -> void: mutated.emit())
+	fleet_positions.changed.connect(mutated.emit)
+	reveal_state.changed.connect(mutated.emit)
 
 func add_ship(ship: Ship) -> void:
 	ships[ship.id] = ship
@@ -149,6 +154,8 @@ func to_dict() -> Dictionary:
 		"players": player_dict,
 		"wolf_attack": wolf_attack.to_dict() if wolf_attack != null else null,
 		"star_systems": star_system_dict,
+		"fleet_positions": fleet_positions.to_dict(),
+		"reveal_state": reveal_state.to_dict(),
 	}
 
 ## What gets broadcast to every connected client - everything except
@@ -182,6 +189,16 @@ func to_public_dict() -> Dictionary:
 	# it the way WolfAttackView exists for targeting. Full exclusion
 	# until that UI exists, same treatment as players.
 	public_dict.erase("star_systems")
+	# fleet_positions/reveal_state aren't broadcast yet either - unlike
+	# star_systems, the raw coordinates/trails here aren't secret on
+	# their own (they're exactly what's printed on the blank paper
+	# chart, per docs/star_map_tv_display.md §3), but nothing consumes
+	# this over the network yet, and the leak-safe way to expose it is
+	# through StarMapProjection.build() (which does attach chart
+	# letters) once the TV screen that needs it actually gets wired up -
+	# not this raw dict.
+	public_dict.erase("fleet_positions")
+	public_dict.erase("reveal_state")
 	return public_dict
 
 ## The one player-specific slice that's safe to send to that player's
@@ -204,6 +221,8 @@ static func from_dict(data: Dictionary) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = int(data.get("rng_seed", state.rng.seed))
 	state.pursuit_track.load_from_dict(data.get("pursuit_track", {}))
+	state.fleet_positions.load_from_dict(data.get("fleet_positions", {}))
+	state.reveal_state.load_from_dict(data.get("reveal_state", {}))
 	state.announcement_log.load_from_dict(data.get("announcement_log", {}))
 
 	var turn_data: Dictionary = data.get("turn", {})
