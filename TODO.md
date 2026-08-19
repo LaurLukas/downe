@@ -2349,9 +2349,14 @@ bug can't recur silently. Full suite still green (39 files).
    grep - it's only ever invoked from tests) - the host-adjudication
    control that supplies `pursuit_delta` doesn't exist, whether in the
    admin console being planned above or elsewhere.
-3. **Pursuit reconciliation on group merge** — spec's own answer is a
-   host prompt (safe default). Needs the split-fleet pursuit model above
-   to exist first; not otherwise blocking.
+3. [x] **Pursuit reconciliation on group merge - built.** Spec's own
+   answer was a host prompt (safe default), never auto-resolved -
+   `FleetPositions._merge_groups()` stashes the absorbed group's pursuit
+   on `pending_merge_pursuits` rather than combining it, and
+   `reconcile_group_pursuit()` is what the host calls to pick a number.
+   The admin console's Star Map section surfaces this directly (shows
+   the pending absorbed value(s), a SpinBox, and a "Reconcile" button per
+   group with something pending).
 
 Open question 6 (system E's reward printing "code W1 or W2," which
 doesn't match any real system letter) reads as still-open in the spec, but
@@ -2364,3 +2369,168 @@ print-file fix, re-scouting stacking vs. replacing, how long dead branches
 persist) are all lower priority per the spec's own framing - "easy to
 change either way," worth a look at first playtest rather than deciding
 now.
+
+## Backlog — Star Map TV visual redesign (design handoff landed, not started)
+
+A full design handoff arrived at `res://ui/design_handoff_star_map/` -
+same pattern as the Wolf Attack lane-layout handoff earlier in this file
+(a `.md` spec, a browser-openable `.dc.html` reference prototype +
+`support.js`, now also real ship-silhouette `.svg` art, all self-
+contained under one folder per its own `README.md`). Read
+`star_map_tv_visual_implementation.md` first - it's explicitly authoritative
+over §5-§6 of the original `docs/star_map_tv_display.md` wherever they
+disagree ("derived from a built and measured 1920×1080 reference"), not
+the other way around. The handoff's `reference/star_map_tv_display.md`
+and `reference/star_charts.json` are byte-identical copies of
+`docs/star_map_tv_display.md`/`docs/star_charts.json` (diffed - no new
+content there, safe to read either copy).
+
+**This is a redesign of the screen just built, not a fresh feature.**
+`reference/before-current-build.png` is a screenshot of the actual
+running app from this session's earlier structural pass (recognizable
+directly - "MERGE PENDING - HOST MUST RECONCILE", the coordinate/ring
+node style, all match `star_map_canvas.gd` exactly). Same "playtest a
+structural pass, get a visual gap spec back" cycle the Wolf Attack
+screen already went through twice (v2, v3) - see those sections above
+for how that work was scoped (structural correctness first, polish only
+once a human has actually looked at a live window).
+
+**Playtest complaint that drove this, verbatim** (matches the Wolf
+Attack v2 pass's own opening move of quoting the user directly): *"hard
+to see where the players are, hard to see where the wolves are, not
+sure what the yellow line is and it's hard to see. If the screen is bad
+the numbers will not be seen."*
+
+### Two deliberate overrides vs. the original spec - build to these, not §5/§6
+
+1. **Node u/v scale factors are no longer uniform** (§2.1: 1.353 u /
+   0.617 v against paper px, not the original 1.153/1.152). The
+   original uniform mapping crushed the deepest tiers against the rail
+   and wasted ~200px of vertical space. `core/star_chart.gd`'s
+   `NODE_POSITION` dict (the u/v values themselves) doesn't change -
+   only the screen-space multiplier in `star_map_canvas.gd`'s
+   `_screen_pos()` does. New pixel positions for all 22 nodes are given
+   directly in §2.1's table - use those, don't re-derive.
+2. **Scout-claim text moves off the map entirely, rail-only.** A real
+   behavior change from what's currently built:
+   `star_map_canvas.gd`'s `_draw_nodes()` currently draws claim text
+   directly under the node (`REPORTED · %s: "%s"` - visible in the
+   screenshot above, and it's illegible, matching the complaint). The
+   new design keeps only a dashed chip on the map reading a **claim
+   count** (`2 CLAIMS · CONFLICT` when claims disagree, else
+   `N CLAIM(S)`) - verbatim text moves to a new rail block (§6.3),
+   already correctly scoped as "never resolves the contradiction, just
+   moves where it's readable."
+
+### What's new to build with (not present before this handoff)
+
+- `res://ui/design_handoff_star_map/svg/capital-*.svg` - hand-authored
+  silhouettes for all 6 capital ships, for the group token's hull glyph
+  (§4.3). No fighter/craft/Voyage 33-0 silhouette - group tokens only
+  ever show a *capital ship* silhouette (the representative), consistent
+  with `FleetPositions`' own representative-selection rules.
+- A single enforced colour table (§3) - `FLEET`/`FLEET_ALT`/`WOLF`/
+  `CLAIM`/`HAZARD`/`KNOWN`/`POOR`/`EDEN`/`UNKNOWN` - replacing
+  `star_map_canvas.gd`'s current ad hoc `CLASS_TINT` dict. Explicit rule
+  worth keeping close during implementation: "amber may never appear on
+  a solid stroke, and no other colour may appear on a dashed one except
+  the relocation arc" - this is the actual fix for "not sure what the
+  yellow line is", not a restyle for its own sake.
+
+### Priority order, per the spec's own framing (§1)
+
+1. **One colour, one meaning** (§3) - single highest-value change per
+   the spec itself.
+2. **Fleet-as-beacon** (§4.2/§4.3) - pulse ring + corner brackets + halo
+   + ship-silhouette token. New animation budget beyond what
+   `StarMapScreen` currently has none of (matches the Wolf Attack
+   screen's own "structural pass now, `Tween`-based polish later"
+   precedent - this is the first polish pass for this screen, not a
+   second structural one).
+3. **Wolves are loud** (§4, wolf node styling + glow layer + rail's
+   Wolf Presence block, §6.2).
+4. **Numbers survive a bad panel** - state-dependent coordinate
+   placement (§4: inside empty `unknown`/`reported` nodes, moved to the
+   info chip for `visited`/`occupied`), no text under 18px anywhere.
+5. **Permanent legend bar** (§7) - new UI element, none of it exists
+   today.
+
+### Projection data contract additions (§9) - four fields, `core/` work
+
+All derived from data `core/` already holds or can reach, per the spec's
+own framing - but two of the four need real new plumbing, not just a
+formatting pass in `star_map_projection.gd`:
+
+- `short_name` / `consequence_summary` per node - **new authored
+  content**, not derived. The spec gives 6 of 16 example short names
+  (`WOLF OUTPOST`, `WOLF FORTRESS`, `EXPLORER OUTPOST`, `ION NEBULA`,
+  `ASTEROIDS`, `ORIGIN`) - the other 10 letters' short names and all 16
+  consequence summaries (≤40 chars, e.g. `ATTACK ON ARRIVAL`) need
+  writing, as a lookup table keyed on letter, kept in `core/` per the
+  spec's own explicit instruction ("do not let the TV scene hold the
+  lookup table - that would put all 21 names one bug away from the
+  screen"). Same iff-visited absence rule as `letter`/`name`/`class` -
+  extend the leak test to cover both.
+- `left_turn` per node - **needs turn-stamped visit history that
+  doesn't exist anywhere in `core/map/` yet.** `FleetPositions.trails`
+  is an ordered list of coordinates with no turn number attached to
+  each entry - there's currently no way to answer "which turn did we
+  leave this node" at all. Real gap, not a formatting task; needs a
+  design decision (turn-stamp every trail entry? a separate
+  `coordinate -> last-departed-turn` map, updated wherever `_relocate()`
+  already runs?) before it can be built.
+- `scouts` per group - **needs a fleet-positions/craft cross-reference
+  that doesn't exist yet.** A scout's range (Starlight 2, Hummingbird 3,
+  Endeavour unlimited) belongs to whichever *ship* it's docked on
+  (`CraftState.docked_ship_id`), and which *group* that ship is
+  currently in comes from `FleetPositions` - nothing today joins those
+  two. `StarChart.reachable_within()`-equivalent BFS logic doesn't exist
+  yet either (`StarChart.graph_distance()` gives point-to-point
+  distance, not a reachable set) - this is real new logic, not a lookup.
+- `band_tint` per group - the easy one: purely derived from which
+  group's tier the render pass is already computing: true when a
+  group's home tier should get the accent fill, AEGIS's group winning
+  ties. Could arguably be computed in the renderer instead of the
+  projection; spec asks for it as a projection field, follow that.
+
+### Also needed, not called out as its own numbered item but real work
+
+- Idle mode (§10) - one `idle_dim` flag, a translucent veil, draw-in
+  suppressed, pulse kept. Depends on nothing else above; could land
+  independently.
+- Title bar's `FLEET SPLIT · n GROUPS` chip (§8) - trivial, reads
+  directly off `groups.size()`, already available.
+- **New test file** `tests/test_star_map_layout.gd` (§11), explicitly
+  requested by name with 6 concrete checks (no two text elements
+  overlap >6px on both axes; nothing renders past x1920/y1080 - "the
+  first build lost a whole rail section this way"; rail column bottom
+  < y1010 at both the densest realistic state *and* the empty state;
+  every info chip closer to its own node than any other node's centre;
+  no text under 18px; minimum node-centre separation ≥160px for all 22
+  nodes) - "run it headless against the projection fixtures, not
+  against a screenshot," matching this project's own established
+  geometry-driving-script pattern (the Wolf Attack lane/ladder passes'
+  "measure `get_combined_minimum_size()` against the assigned slot"
+  scripts), but as a real committed test file this time, not a
+  throwaway.
+
+### Explicitly out of scope per the design itself, not a gap in this pass
+
+`README.md`'s own words: the scout-range wash over reachable nodes
+(display spec §6.6) and 2/3-hop jump badges were "judged clutter against
+the readability goal" and deliberately cut, addable behind host toggles
+later if asked for. Matches this file's own `scout_rings`/`jump_ranges`
+deferral already logged under `StarMapProjection`'s "what's needed"
+section above - still nothing to build there, now doubly confirmed as
+intentional rather than just unstarted.
+
+**One thing worth flagging: the handoff's own README is stale against
+this session's actual progress**, not wrong about the design work. It
+says the original spec's "pursuit per jump vs per tier" and "merge
+reconciliation" questions "are untouched by this pass and remain
+blockers on the data model, not on rendering" - both are already
+resolved and built earlier in this same session (see the "Blockers"
+list above: cumulative-per-tier confirmed and wired into `JumpResolver`,
+merge reconciliation built into `FleetPositions`/the admin console).
+The README was written against the pre-this-session state of the
+project; nothing here blocks starting the visual work.

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 60" width="300" height="120">
+  <title>Capital ship — dione</title>
+  <g fill="#A97BFF">
+    <polygon points="14,24 118,24 140,32 118,42 14,42"></polygon>
+    <rect x="34" y="10" width="20" height="14"></rect>
+    <rect x="60" y="10" width="20" height="14"></rect>
+    <rect x="86" y="10" width="20" height="14"></rect>
+    <rect x="4" y="22" width="11" height="22"></rect>
+  </g>
+</svg>

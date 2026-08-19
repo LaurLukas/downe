@@ -1,0 +1,665 @@
+{
+ "source": "DoWNE A4 Single Sided v1.0.1, pages 24-28 (player) and 29-31 (organiser A/B/C)",
+ "topology_note": "All three organiser charts share identical node positions and identical edges. Only letter assignment differs.",
+ "coordinate_space": {
+  "u": "0 = START tier, 1 = deepest tier (paper bottom->top)",
+  "v": "0 = paper left edge, 1 = paper right edge",
+  "rotation": "paper rotated 90 deg clockwise: screen_x from u, screen_y from v"
+ },
+ "nodes": [
+  {
+   "id": "0000",
+   "tier": 0,
+   "u": 0.0,
+   "v": 0.509,
+   "paper": {
+    "x": 466,
+    "y": 1238
+   },
+   "letters": {
+    "A": "start",
+    "B": "start",
+    "C": "start"
+   }
+  },
+  {
+   "id": "1413",
+   "tier": 1,
+   "u": 0.1198,
+   "v": 0.6372,
+   "paper": {
+    "x": 566,
+    "y": 1105
+   },
+   "letters": {
+    "A": "A",
+    "B": "L",
+    "C": "L"
+   }
+  },
+  {
+   "id": "5143",
+   "tier": 1,
+   "u": 0.1937,
+   "v": 0.3038,
+   "paper": {
+    "x": 306,
+    "y": 1023
+   },
+   "letters": {
+    "A": "L",
+    "B": "E",
+    "C": "L"
+   }
+  },
+  {
+   "id": "0488",
+   "tier": 2,
+   "u": 0.2595,
+   "v": 0.8231,
+   "paper": {
+    "x": 711,
+    "y": 950
+   },
+   "letters": {
+    "A": "L",
+    "B": "L",
+    "C": "C"
+   }
+  },
+  {
+   "id": "6837",
+   "tier": 2,
+   "u": 0.282,
+   "v": 0.5064,
+   "paper": {
+    "x": 464,
+    "y": 925
+   },
+   "letters": {
+    "A": "D",
+    "B": "B",
+    "C": "E"
+   }
+  },
+  {
+   "id": "9997",
+   "tier": 2,
+   "u": 0.3126,
+   "v": 0.1077,
+   "paper": {
+    "x": 153,
+    "y": 891
+   },
+   "letters": {
+    "A": "C",
+    "B": "L",
+    "C": "D"
+   }
+  },
+  {
+   "id": "6931",
+   "tier": 3,
+   "u": 0.4099,
+   "v": 0.3141,
+   "paper": {
+    "x": 314,
+    "y": 783
+   },
+   "letters": {
+    "A": "L",
+    "B": "I",
+    "C": "L"
+   }
+  },
+  {
+   "id": "4454",
+   "tier": 3,
+   "u": 0.4369,
+   "v": 0.7026,
+   "paper": {
+    "x": 617,
+    "y": 753
+   },
+   "letters": {
+    "A": "M",
+    "B": "L",
+    "C": "L"
+   }
+  },
+  {
+   "id": "1096",
+   "tier": 4,
+   "u": 0.5414,
+   "v": 0.441,
+   "paper": {
+    "x": 413,
+    "y": 637
+   },
+   "letters": {
+    "A": "I",
+    "B": "F",
+    "C": "M"
+   }
+  },
+  {
+   "id": "4753",
+   "tier": 4,
+   "u": 0.564,
+   "v": 0.141,
+   "paper": {
+    "x": 179,
+    "y": 612
+   },
+   "letters": {
+    "A": "E",
+    "B": "K",
+    "C": "G"
+   }
+  },
+  {
+   "id": "6964",
+   "tier": 4,
+   "u": 0.564,
+   "v": 0.8795,
+   "paper": {
+    "x": 755,
+    "y": 612
+   },
+   "letters": {
+    "A": "G",
+    "B": "J",
+    "C": "I"
+   }
+  },
+  {
+   "id": "3068",
+   "tier": 5,
+   "u": 0.6676,
+   "v": 0.2782,
+   "paper": {
+    "x": 286,
+    "y": 497
+   },
+   "letters": {
+    "A": "M",
+    "B": "M",
+    "C": "H"
+   }
+  },
+  {
+   "id": "6943",
+   "tier": 5,
+   "u": 0.6676,
+   "v": 1.0,
+   "paper": {
+    "x": 849,
+    "y": 497
+   },
+   "letters": {
+    "A": "K",
+    "B": "L",
+    "C": "F"
+   }
+  },
+  {
+   "id": "0853",
+   "tier": 5,
+   "u": 0.6892,
+   "v": 0.6385,
+   "paper": {
+    "x": 567,
+    "y": 473
+   },
+   "letters": {
+    "A": "L",
+    "B": "M",
+    "C": "M"
+   }
+  },
+  {
+   "id": "2580",
+   "tier": 5,
+   "u": 0.7108,
+   "v": 0.0,
+   "paper": {
+    "x": 69,
+    "y": 449
+   },
+   "letters": {
+    "A": "F",
+    "B": "G",
+    "C": "J"
+   }
+  },
+  {
+   "id": "1964",
+   "tier": 6,
+   "u": 0.7946,
+   "v": 0.8462,
+   "paper": {
+    "x": 729,
+    "y": 356
+   },
+   "letters": {
+    "A": "M",
+    "B": "P",
+    "C": "K"
+   }
+  },
+  {
+   "id": "6798",
+   "tier": 6,
+   "u": 0.8216,
+   "v": 0.1141,
+   "paper": {
+    "x": 158,
+    "y": 326
+   },
+   "letters": {
+    "A": "N",
+    "B": "M",
+    "C": "N"
+   }
+  },
+  {
+   "id": "8378",
+   "tier": 6,
+   "u": 0.8459,
+   "v": 0.541,
+   "paper": {
+    "x": 491,
+    "y": 299
+   },
+   "letters": {
+    "A": "J",
+    "B": "M",
+    "C": "O"
+   }
+  },
+  {
+   "id": "4888",
+   "tier": 7,
+   "u": 0.9279,
+   "v": 0.9744,
+   "paper": {
+    "x": 829,
+    "y": 208
+   },
+   "letters": {
+    "A": "P",
+    "B": "H",
+    "C": "P"
+   }
+  },
+  {
+   "id": "1380",
+   "tier": 7,
+   "u": 0.9297,
+   "v": 0.009,
+   "paper": {
+    "x": 76,
+    "y": 206
+   },
+   "letters": {
+    "A": "M",
+    "B": "O",
+    "C": "M"
+   }
+  },
+  {
+   "id": "1836",
+   "tier": 7,
+   "u": 0.9514,
+   "v": 0.3038,
+   "paper": {
+    "x": 306,
+    "y": 182
+   },
+   "letters": {
+    "A": "H",
+    "B": "M",
+    "C": "M"
+   }
+  },
+  {
+   "id": "0408",
+   "tier": 7,
+   "u": 1.0,
+   "v": 0.6731,
+   "paper": {
+    "x": 594,
+    "y": 128
+   },
+   "letters": {
+    "A": "O",
+    "B": "N",
+    "C": "M"
+   }
+  }
+ ],
+ "edges": [
+  [
+   "0000",
+   "1413"
+  ],
+  [
+   "0000",
+   "5143"
+  ],
+  [
+   "1413",
+   "5143"
+  ],
+  [
+   "1413",
+   "0488"
+  ],
+  [
+   "1413",
+   "6837"
+  ],
+  [
+   "5143",
+   "6837"
+  ],
+  [
+   "5143",
+   "9997"
+  ],
+  [
+   "0488",
+   "6837"
+  ],
+  [
+   "0488",
+   "4454"
+  ],
+  [
+   "6837",
+   "6931"
+  ],
+  [
+   "6837",
+   "4454"
+  ],
+  [
+   "9997",
+   "6931"
+  ],
+  [
+   "6931",
+   "4454"
+  ],
+  [
+   "6931",
+   "1096"
+  ],
+  [
+   "6931",
+   "4753"
+  ],
+  [
+   "4454",
+   "1096"
+  ],
+  [
+   "4454",
+   "6964"
+  ],
+  [
+   "1096",
+   "4753"
+  ],
+  [
+   "1096",
+   "6964"
+  ],
+  [
+   "1096",
+   "3068"
+  ],
+  [
+   "1096",
+   "0853"
+  ],
+  [
+   "4753",
+   "3068"
+  ],
+  [
+   "4753",
+   "2580"
+  ],
+  [
+   "6964",
+   "6943"
+  ],
+  [
+   "6964",
+   "0853"
+  ],
+  [
+   "3068",
+   "0853"
+  ],
+  [
+   "3068",
+   "6798"
+  ],
+  [
+   "3068",
+   "8378"
+  ],
+  [
+   "6943",
+   "1964"
+  ],
+  [
+   "0853",
+   "1964"
+  ],
+  [
+   "0853",
+   "8378"
+  ],
+  [
+   "2580",
+   "6798"
+  ],
+  [
+   "1964",
+   "8378"
+  ],
+  [
+   "1964",
+   "4888"
+  ],
+  [
+   "1964",
+   "0408"
+  ],
+  [
+   "6798",
+   "1380"
+  ],
+  [
+   "6798",
+   "1836"
+  ],
+  [
+   "8378",
+   "1836"
+  ],
+  [
+   "8378",
+   "0408"
+  ],
+  [
+   "4888",
+   "0408"
+  ],
+  [
+   "1380",
+   "1836"
+  ]
+ ],
+ "systems": {
+  "A": {
+   "name": "Lichen-Covered Asteroids",
+   "class": "poor"
+  },
+  "B": {
+   "name": "Ice Asteroids",
+   "class": "poor"
+  },
+  "C": {
+   "name": "Rare Element Moon",
+   "class": "poor"
+  },
+  "D": {
+   "name": "Abandoned Explorer Outpost",
+   "class": "neutral"
+  },
+  "E": {
+   "name": "I.C.S.S. Athena Survivors",
+   "class": "standard"
+  },
+  "F": {
+   "name": "Abandoned Refuelling Station",
+   "class": "standard"
+  },
+  "G": {
+   "name": "Level 5 Survivable Planet",
+   "class": "standard",
+   "note": "Jumping here does not reduce the Pursuit Track."
+  },
+  "H": {
+   "name": "Derelict Research Vessel",
+   "class": "standard"
+  },
+  "I": {
+   "name": "Ion Nebula",
+   "class": "hazard",
+   "note": "Pursuit Track is not raised while in the nebula; ships may take damage each turn."
+  },
+  "J": {
+   "name": "Unstable Star",
+   "class": "hazard",
+   "note": "Each ship takes damage on a 4+ during the maintenance phase."
+  },
+  "K": {
+   "name": "Abandoned Wolf Supply Outpost",
+   "class": "hazard",
+   "note": "Unknown difficulty; triggers a wolf attack unless critically successful."
+  },
+  "L": {
+   "name": "Active Wolf Outpost",
+   "class": "wolf",
+   "note": "On arrival: wolf attack, >=1 battle station + 20 damage of other ships."
+  },
+  "M": {
+   "name": "Active Wolf Fortress",
+   "class": "wolf",
+   "note": "On arrival: wolf attack, >=2 battle stations + 25 damage of other ships."
+  },
+  "N": {
+   "name": "Ancient Jump Ring",
+   "class": "new_eden"
+  },
+  "O": {
+   "name": "Deep Nebula",
+   "class": "new_eden"
+  },
+  "P": {
+   "name": "Ancient Space Station",
+   "class": "new_eden",
+   "note": "On arrival: wolf attack, >=1 battle station + 20 damage; survivors re-attack."
+  }
+ },
+ "variant_summary": {
+  "A": {
+   "omits": [
+    "B"
+   ],
+   "wolf_systems": 8,
+   "poor_systems": [
+    "A",
+    "C"
+   ],
+   "new_eden": {
+    "N": "6798",
+    "O": "0408",
+    "P": "4888"
+   }
+  },
+  "B": {
+   "omits": [
+    "A",
+    "C",
+    "D"
+   ],
+   "wolf_systems": 10,
+   "poor_systems": [
+    "B"
+   ],
+   "new_eden": {
+    "N": "0408",
+    "O": "1380",
+    "P": "1964"
+   }
+  },
+  "C": {
+   "omits": [
+    "A",
+    "B"
+   ],
+   "wolf_systems": 9,
+   "poor_systems": [
+    "C"
+   ],
+   "new_eden": {
+    "N": "6798",
+    "O": "8378",
+    "P": "4888"
+   }
+  }
+ },
+ "jump_classes": {
+  "short": {
+   "hops": 1
+  },
+  "medium": {
+   "hops": 2
+  },
+  "long": {
+   "hops": 3
+  },
+  "note": "Confirmed: jump distance is hop count over the edge list, not physical chart distance. Fuel cost is per Jump Drive console; Upgraded reduces cost by 1.",
+  "fuel_examples": {
+   "aegis": {
+    "short": 2,
+    "medium": 3,
+    "long": 6
+   },
+   "voyage_33_0": {
+    "short": 1,
+    "medium": 1,
+    "long": 2
+   }
+  }
+ },
+ "display_rules": {
+  "one_token_per_group": true,
+  "aegis_group_always_represented_by_aegis": true,
+  "representative_selection_order": [
+   "dione",
+   "icebreaker",
+   "shepherd",
+   "quellon",
+   "refinery_124",
+   "voyage_33_0"
+  ],
+  "representative_stable_for_group_lifetime": true
+ }
+}

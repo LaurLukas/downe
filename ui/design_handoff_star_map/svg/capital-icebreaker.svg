@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 60" width="300" height="120">
+  <title>Capital ship — icebreaker</title>
+  <g fill="#E8873C">
+    <polygon points="26,22 100,22 126,30 100,40 26,40"></polygon>
+    <rect x="14" y="12" width="14" height="38"></rect>
+    <polygon points="126,26 146,30 126,36"></polygon>
+    <rect x="60" y="14" width="10" height="8"></rect>
+    <rect x="60" y="40" width="10" height="8"></rect>
+  </g>
+</svg>
