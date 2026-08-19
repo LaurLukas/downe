@@ -141,8 +141,9 @@ const FONT_SIZE_BAND_LABEL := 28 # band-scale labels (START, -1..-7)
 const FONT_SIZE_LEGEND := 18 # legend bar item labels (§7)
 const FONT_SIZE_TOKEN_ABBR := 18 # group token abbreviation (§4.3)
 const FONT_SIZE_EDGE_LABEL := 18 # "JUMP FAILURE" trail label (§5)
+const FONT_SIZE_DMG_TAG := 18 # group token's "DMG" tag (§4.3)
 
 const ALL_FONT_SIZES: Array[int] = [
 	FONT_SIZE_COORD, FONT_SIZE_LETTER, FONT_SIZE_CHIP, FONT_SIZE_BAND_LABEL,
-	FONT_SIZE_LEGEND, FONT_SIZE_TOKEN_ABBR, FONT_SIZE_EDGE_LABEL,
+	FONT_SIZE_LEGEND, FONT_SIZE_TOKEN_ABBR, FONT_SIZE_EDGE_LABEL, FONT_SIZE_DMG_TAG,
 ]

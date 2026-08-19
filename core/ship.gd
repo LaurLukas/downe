@@ -58,6 +58,24 @@ func add_console(console_id: String) -> Console:
 func get_console(console_id: String) -> Console:
 	return consoles.get(console_id)
 
+## The "ship damaged" definition the Star Map screen's group token
+## needed (ui/design_handoff_star_map/star_map_tv_visual_implementation.md
+## §4.3's "damaged member" bottom-edge/DMG tag, blocked on this not
+## being settled - see TODO.md). A ship has no single damaged flag of
+## its own - only per-console state (Console.State: OK/DAMAGED/
+## DESTROYED) - so "damaged" here means "at least one console isn't
+## OK", DESTROYED included. This is a display convenience derived
+## entirely from data that's already the real, rules-accurate source of
+## a ship's condition - not a new rule, and not a guess at anything the
+## source material leaves unstated (nothing in the source material
+## defines a ship-level "damaged" concept at all; consoles are always
+## what actually gets damaged/repaired).
+func is_damaged() -> bool:
+	for console_id: String in consoles:
+		if consoles[console_id].state != Console.State.OK:
+			return true
+	return false
+
 ## Accepts whatever the scout typed, verbatim. Never validate this against
 ## real star system data, auto-fill it, or flag it as wrong - a lying
 ## scout is the game, not a bug. See CLAUDE.md constraint 1.

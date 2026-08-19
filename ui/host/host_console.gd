@@ -761,7 +761,7 @@ func _rebuild_star_map_section() -> void:
 
 	var view := StarMapProjection.build_ground_truth(
 		game_state.chart_in_play, game_state.turn_manager.turn_number,
-		game_state.fleet_positions, game_state.reveal_state, game_state.craft
+		game_state.fleet_positions, game_state.reveal_state, game_state.craft, game_state.ships
 	)
 
 	var canvas_scroll := ScrollContainer.new()

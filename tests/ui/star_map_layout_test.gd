@@ -182,7 +182,7 @@ static func _dense_rail_fixture() -> Dictionary:
 		"hummingbird": CraftState.new("hummingbird", "quellon"),
 		"endeavour": CraftState.new("endeavour", "shepherd"),
 	}
-	return StarMapProjection.build("A", 3, positions, reveal, craft)
+	return StarMapProjection.build("A", 3, positions, reveal, craft, {})
 
 ## One group, no claims, no wolves - the other fixture §11 explicitly
 ## asks for, since an unconditionally-too-tall element would only show
@@ -190,7 +190,7 @@ static func _dense_rail_fixture() -> Dictionary:
 static func _empty_rail_fixture() -> Dictionary:
 	var positions := FleetPositions.new()
 	var reveal := RevealState.new()
-	return StarMapProjection.build("A", 1, positions, reveal, {})
+	return StarMapProjection.build("A", 1, positions, reveal, {}, {})
 
 # --- check 4: every info chip is closer to its own node than any other -----
 

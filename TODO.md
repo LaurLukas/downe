@@ -2459,15 +2459,46 @@ the numbers will not be seen."*
    `res://ui/design_handoff_star_map/svg/capital-*.svg` is byte-
    identical to the Wolf Attack screen's existing copy, confirmed by
    diff, so no new preload list was needed) tinted dark ink, plus the
-   AEGIS white outline. **Not built**: the animated pulse ring itself
-   (drawn as a static ring at rest scale instead - same "structural now,
-   Tween later" call already made for the Wolf Attack screen's v1 pass),
-   the token's index disc (a map-to-rail-card link badge - the rail
-   redesign below now has real index numbers on each card to link *to*,
-   so this is buildable, just not done yet), and the "damaged member"
-   bottom-edge/`DMG` tag (needs a definition of "ship damaged" this
-   project hasn't settled - a ship has per-console damage, not a single
-   damaged flag).
+   AEGIS white outline, **and the "damaged member" bottom-edge/`DMG`
+   tag - built**, once "ship damaged" got a real definition: new
+   `Ship.is_damaged()` (`core/ship.gd`) - true iff at least one console
+   isn't `OK` (`DAMAGED` or `DESTROYED` both count). A ship has no
+   single damaged flag of its own, only per-console state, so this is a
+   display convenience derived entirely from data that's already the
+   real, rules-accurate source of a ship's condition - not a new rule,
+   and not a guess at anything the source material leaves unstated
+   (nothing in the source defines a ship-level "damaged" concept at
+   all). 5 new tests in `tests/core/ship_test.gd`.
+
+   `StarMapProjection` gained a `ships: Dictionary` parameter (both
+   `build()`/`build_ground_truth()`, all call sites updated) and each
+   group dict gained `damaged_member_ids` - checked once per group, so
+   the token *and* the rail card both read the same list instead of
+   re-deriving it twice. Per §4.3's own wording ("any OTHER group"),
+   AEGIS's group never shows the damaged treatment even if a member is
+   damaged - its token already has the white outline instead, and the
+   rail card follows the same rule for consistency between the two.
+   `voyage_33_0` (no `Ship` object) never counts as damaged - there's
+   nothing to check, not a guess either way. The rail's member list
+   became a `RichTextLabel` (nested `[color=]` BBCode) so a damaged
+   member can read `ICEBREAKER (DAMAGED)` in `WOLF` inline, same
+   mixed-colour-text need the group card's header already had. 3 new
+   projection tests (no damage by default, one damaged member reported,
+   `voyage_33_0` never flagged).
+
+   **Not built**: the animated pulse ring itself (drawn as a static ring
+   at rest scale instead - same "structural now, Tween later" call
+   already made for the Wolf Attack screen's v1 pass), and the token's
+   index disc (a map-to-rail-card link badge - the rail redesign below
+   now has real index numbers on each card to link *to*, so this is
+   buildable, just not done yet).
+
+   Verified against the real running scene with a driving script:
+   damaged one of Icebreaker's real consoles, split it into its own
+   group, and confirmed both `damaged_member_ids` and the rendered rail
+   card's `ICEBREAKER (DAMAGED)` text came through correctly, while
+   AEGIS's own (undamaged) group card showed no such flag. Full test
+   suite green at 46 files (was 45).
 3. [x] **Wolves are loud** (§4 node styling + glow layer) - built for the
    *map* half. Wolf nodes get the 5px `WOLF` ring + tinted fill + the
    radial glow. **The rail's Wolf Presence block (§6.2) is not built** -

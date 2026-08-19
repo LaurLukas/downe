@@ -394,16 +394,28 @@ static func _claims_disagree(claims: Array) -> bool:
 func _draw_group_tokens() -> void:
 	var abbr_font := WolfAttackTokens.font("T_SEC")
 	var abbr_size := StarMapTokens.FONT_SIZE_TOKEN_ABBR
+	var dmg_font := WolfAttackTokens.font("T_SEC")
 
 	for group: Dictionary in (view.get("groups", []) as Array):
 		var pos := _screen_pos(String(group["at"])) + Vector2(TOKEN_RADIUS + 14.0, -(TOKEN_RADIUS + 14.0))
 		var representative: Dictionary = group["representative"]
 		var is_aegis: bool = bool(representative["is_aegis"])
 		var colour := StarMapTokens.group_colour(is_aegis)
+		# §4.3: "AEGIS's token: 3px white outline. Any other group: 6px
+		# WOLF-coloured bottom edge if the group contains a damaged
+		# ship, plus a DMG tag." AEGIS's group never gets the damaged
+		# treatment even if it has a damaged member - the spec's own
+		# wording ("any OTHER group") gives the white outline priority
+		# there, not this.
+		var is_damaged: bool = not is_aegis and not (group.get("damaged_member_ids", []) as Array).is_empty()
 
 		draw_circle(pos, TOKEN_RADIUS, colour)
 		if is_aegis:
 			draw_arc(pos, TOKEN_RADIUS + 2.0, 0.0, TAU, 32, Color.WHITE, 3.0, true)
+		if is_damaged:
+			draw_line(pos + Vector2(-TOKEN_RADIUS, TOKEN_RADIUS - 1.0), pos + Vector2(TOKEN_RADIUS, TOKEN_RADIUS - 1.0), StarMapTokens.WOLF, 6.0)
+			var dmg_pos := pos + Vector2(-TOKEN_RADIUS, TOKEN_RADIUS + 18.0)
+			draw_string(dmg_font, dmg_pos, "DMG", HORIZONTAL_ALIGNMENT_CENTER, TOKEN_RADIUS * 2.0, StarMapTokens.FONT_SIZE_DMG_TAG, StarMapTokens.WOLF)
 
 		var rep_id: String = String(representative["id"])
 		var texture: Texture2D = ShipIcon._TEXTURES.get(rep_id)

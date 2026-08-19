@@ -50,6 +50,7 @@ func _refresh() -> void:
 		game_state.fleet_positions,
 		game_state.reveal_state,
 		game_state.craft,
+		game_state.ships,
 	)
 	var groups: Array = view["groups"]
 	# §8: the split chip only appears once there's something to say -
@@ -244,11 +245,29 @@ func _build_group_card(group: Dictionary, view: Dictionary) -> Control:
 	]
 	box.add_child(header)
 
-	var members_label := Label.new()
-	members_label.text = " · ".join((group["members"] as Array).map(func(m: Variant) -> String: return String(m).to_upper()))
-	WolfAttackTokens.apply(members_label, "T_STAT")
-	members_label.add_theme_color_override("font_color", StarMapTokens.TEXT_SECONDARY)
-	members_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	# §6.1: "damaged members flagged (DAMAGED) in WOLF" - non-AEGIS
+	# groups only, matching §4.3's group-token treatment (AEGIS's group
+	# never gets the damaged callout, token or card, per that section's
+	# own "any OTHER group" wording). A plain Label can't mix colours
+	# inline, so this is a RichTextLabel like the header above, not a
+	# second styling mechanism.
+	var member_ids: Array = group["member_ids"]
+	var member_names: Array = group["members"]
+	var damaged_ids: Array = group["damaged_member_ids"]
+	var member_parts: Array[String] = []
+	for i in member_ids.size():
+		var unit_id: String = String(member_ids[i])
+		var display := String(member_names[i]).to_upper()
+		if not is_aegis and unit_id in damaged_ids:
+			member_parts.append("%s [color=#%s](DAMAGED)[/color]" % [display, StarMapTokens.WOLF.to_html(false)])
+		else:
+			member_parts.append(display)
+
+	var members_label := RichTextLabel.new()
+	members_label.bbcode_enabled = true
+	members_label.fit_content = true
+	members_label.scroll_active = false
+	members_label.text = "[font_size=22][color=#%s]%s[/color][/font_size]" % [StarMapTokens.TEXT_SECONDARY.to_html(false), " · ".join(member_parts)]
 	box.add_child(members_label)
 
 	# Consequence summary (§6.1's line 3) - "why the fleet's situation is

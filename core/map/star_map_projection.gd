@@ -10,16 +10,17 @@ extends RefCounted
 ## WolfAttackView's leak tests were written first for the same reason).
 ##
 ## Deliberately scoped to what §7's schema needs for nodes/groups/
-## path_tree plus the four additive fields from ui/design_handoff_star_map/
+## path_tree plus the additive fields from ui/design_handoff_star_map/
 ## star_map_tv_visual_implementation.md §9 (short_name,
-## consequence_summary, left_turn/visited_turns, band_tint, scouts) -
-## scout_rings, jump_ranges, and highlight are still left out: they're
-## host-toggled overlays needing destination state nothing in core/
-## tracks yet, separate from the scout *reach* data `scouts` now
-## carries (see TODO.md).
+## consequence_summary, left_turn/visited_turns, band_tint, scouts) and
+## §4.3/§6.1's damaged_member_ids (added once "ship damaged" got a real
+## definition - see Ship.is_damaged()) - scout_rings, jump_ranges, and
+## highlight are still left out: they're host-toggled overlays needing
+## destination state nothing in core/ tracks yet, separate from the
+## scout *reach* data `scouts` now carries (see TODO.md).
 
-static func build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary) -> Dictionary:
-	return _build(chart, turn, fleet_positions, reveal_state, craft, false)
+static func build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary, ships: Dictionary) -> Dictionary:
+	return _build(chart, turn, fleet_positions, reveal_state, craft, ships, false)
 
 ## Ground truth for the host's own admin console (§8) - every node's
 ## letter/name/class/consequence is always attached, regardless of
@@ -30,10 +31,10 @@ static func build(chart: String, turn: int, fleet_positions: FleetPositions, rev
 ## that could accidentally be flipped to this. The admin console is its
 ## own scene, never routed to the second monitor, same boundary
 ## CLAUDE.md and the spec already draw for it.
-static func build_ground_truth(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary) -> Dictionary:
-	return _build(chart, turn, fleet_positions, reveal_state, craft, true)
+static func build_ground_truth(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary, ships: Dictionary) -> Dictionary:
+	return _build(chart, turn, fleet_positions, reveal_state, craft, ships, true)
 
-static func _build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary, reveal_all: bool) -> Dictionary:
+static func _build(chart: String, turn: int, fleet_positions: FleetPositions, reveal_state: RevealState, craft: Dictionary, ships: Dictionary, reveal_all: bool) -> Dictionary:
 	var groups := fleet_positions.groups()
 
 	var unit_group: Dictionary[String, String] = {}
@@ -63,7 +64,7 @@ static func _build(chart: String, turn: int, fleet_positions: FleetPositions, re
 	for group: Dictionary in groups:
 		var tier := _tier_of(String(group["at"]))
 		var band_tint: bool = band_tint_winners.get(tier, "") == group["id"]
-		group_dicts.append(_build_group(group, band_tint, _scouts_for_group(group["id"], craft, unit_group)))
+		group_dicts.append(_build_group(group, band_tint, _scouts_for_group(group["id"], craft, unit_group), ships))
 
 	return {
 		"type": "star_map",
@@ -214,11 +215,20 @@ static func _display_name(unit_id: String) -> String:
 		return "G.I.V. Voyage 33-0"
 	return ShipRegistry.display_name(unit_id)
 
-static func _build_group(group: Dictionary, band_tint: bool, scouts: Array[Dictionary]) -> Dictionary:
+static func _build_group(group: Dictionary, band_tint: bool, scouts: Array[Dictionary], ships: Dictionary) -> Dictionary:
 	var members: Array = group["members"]
 	var member_names: Array[String] = []
+	var damaged_member_ids: Array[String] = []
 	for unit_id: String in members:
 		member_names.append(_display_name(unit_id))
+		# voyage_33_0 (and any other non-Ship unit) has no console state
+		# to check - never counts as damaged, since "damaged" here is
+		# entirely derived from Ship.is_damaged()'s console data, not a
+		# guess about an object that doesn't exist. See that method's
+		# own comment for the "ship damaged" definition itself.
+		var ship: Ship = ships.get(unit_id)
+		if ship != null and ship.is_damaged():
+			damaged_member_ids.append(unit_id)
 
 	var representative: String = group["representative"]
 	return {
@@ -242,4 +252,8 @@ static func _build_group(group: Dictionary, band_tint: bool, scouts: Array[Dicti
 		"pending_merge_pursuits": group["pending_merge_pursuits"],
 		"band_tint": band_tint,
 		"scouts": scouts,
+		# §4.3/§6.1's "damaged member" flag - the group token's DMG tag
+		# and the rail card's "(DAMAGED)" suffix both read this instead
+		# of re-deriving it, so there's one definition, not two.
+		"damaged_member_ids": damaged_member_ids,
 	}
