@@ -36,6 +36,7 @@ signal star_map_toggle_pressed()
 @onready var _ship_list: VBoxContainer = %ShipList
 @onready var _craft_list: VBoxContainer = %CraftList
 @onready var _players_list: VBoxContainer = %PlayersList
+@onready var _away_missions_list: VBoxContainer = %AwayMissionsList
 @onready var _new_player_name: LineEdit = %NewPlayerName
 @onready var _add_player_button: Button = %AddPlayerButton
 @onready var _wolf_attack_section: VBoxContainer = %WolfAttackSection
@@ -97,6 +98,7 @@ func set_game_state(state: GameState) -> void:
 	_build_ship_panels()
 	_build_craft_panels()
 	_build_player_panels()
+	_build_away_mission_panels()
 	_rebuild_wolf_attack_section()
 	_rebuild_star_map_section()
 	_rebuild_dice_log_section()
@@ -535,6 +537,192 @@ func _best_guess_local_ip() -> String:
 			continue  # loopback, link-local/APIPA (no real network), or IPv6
 		return address
 	return "<host-ip>"
+
+## --- away missions ------------------------------------------------------
+## Card assignment (who gets which card, who argues for what) stays a
+## table negotiation between the Mission Leader and the team - CLAUDE.md
+## constraint 2. This automates only the scoring arithmetic (A-10 =
+## +1-10, face cards = -5, plus shuttle bonuses -
+## AwayMissionOpportunity.score()) and records the outcome; it never
+## picks or assigns a card.
+##
+## Deliberately does NOT auto-apply a reward to GameState. Reward text
+## (star_system_definitions.gd) is free-form prose transcribed from the
+## source table - "8 food" is a simple resource grant, but "Endeavour
+## crosses out 1 research box of choice" or "upgrade 2 weapon consoles"
+## are host judgment calls with no single unambiguous GameState mutation
+## to apply automatically, and some reference systems this project
+## doesn't model yet (research boxes). Parsing some reward strings but
+## not others would be worse than parsing none - the host reads the
+## reward text here and applies it through this console's existing
+## per-ship/per-console controls, same as they'd read it off a card.
+##
+## Built once per system (refresh-on-expand, same reasoning as the ship/
+## craft/player panels above) rather than rebuilt on every mutation - the
+## card-total LineEdit is exactly the kind of in-progress typing a
+## background rebuild would blow away.
+
+const SKILL_LABELS: Dictionary[AwayMissionOpportunity.Skill, String] = {
+	AwayMissionOpportunity.Skill.EXPLORATION: "Exploration",
+	AwayMissionOpportunity.Skill.MINING: "Mining",
+	AwayMissionOpportunity.Skill.SALVAGE: "Salvage",
+	AwayMissionOpportunity.Skill.SCIENCE: "Science",
+	AwayMissionOpportunity.Skill.ENGINEERING: "Engineering",
+	AwayMissionOpportunity.Skill.SEARCH_AND_RESCUE: "Search & Rescue",
+}
+const VALID_CARD_RANKS: Array[String] = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+
+func _build_away_mission_panels() -> void:
+	var letters := game_state.star_systems.keys()
+	letters.sort()
+	for letter: String in letters:
+		var system: StarSystem = game_state.star_systems[letter]
+		# N/O/P: bespoke non-card completion conditions, not modeled in
+		# core/ yet (see TODO.md) - they have no `opportunities` at all,
+		# so this skips them structurally rather than hardcoding letters.
+		if system.definition().opportunities.is_empty():
+			continue
+		_build_away_mission_panel(system)
+
+func _build_away_mission_panel(system: StarSystem) -> void:
+	var definition := system.definition()
+	var refreshers: Array[Callable] = []
+	var body := _make_collapsible_panel(_away_missions_list, "%s - %s" % [system.letter, definition.display_name], refreshers)
+
+	var blocked_note := Label.new()
+	blocked_note.autowrap_mode = TextServer.AUTOWRAP_WORD
+	blocked_note.visible = false
+	body.add_child(blocked_note)
+
+	var rows_container := VBoxContainer.new()
+	body.add_child(rows_container)
+
+	var refresh_panel := func() -> void:
+		blocked_note.visible = false
+		for child in rows_container.get_children():
+			child.free()
+
+		# L, M only - open_questions_answered.md §1.2: the away mission is
+		# blocked while the Wolf base there is still operational.
+		if definition.away_mission_blocked_while_wolf_base_operational and not system.wolf_base_destroyed:
+			blocked_note.visible = true
+			blocked_note.text = "Blocked - the Wolf base here is still operational."
+			var destroy_button := Button.new()
+			destroy_button.text = "Mark Wolf base destroyed"
+			destroy_button.pressed.connect(func() -> void: system.set_wolf_base_destroyed(true))
+			rows_container.add_child(destroy_button)
+			return
+
+		for index in definition.opportunities.size():
+			rows_container.add_child(_build_away_mission_opportunity_row(system, definition.opportunities[index], index))
+
+	refreshers.append(refresh_panel)
+	_all_refreshers.append_array(refreshers)
+
+func _build_away_mission_opportunity_row(system: StarSystem, opportunity: AwayMissionOpportunity, index: int) -> Control:
+	var row := VBoxContainer.new()
+
+	var skill_names: Array[String] = []
+	for skill: AwayMissionOpportunity.Skill in opportunity.skills:
+		skill_names.append(SKILL_LABELS.get(skill, "?"))
+
+	# System K only: difficulty is secretly rolled at runtime and never
+	# shown to players - see StarSystem.roll_hidden_difficulty(). This is
+	# the host console, never broadcast (GameState.to_public_dict()
+	# excludes star_systems entirely), so it's safe - and necessary - to
+	# show the rolled value plainly here once it exists.
+	var using_hidden := opportunity.hidden_until_rolled
+	var difficulty := system.hidden_difficulty if using_hidden else opportunity.difficulty
+	var critical_threshold := system.hidden_critical_threshold if using_hidden else opportunity.critical_threshold
+
+	var header := Label.new()
+	var difficulty_text: String
+	if using_hidden and difficulty == -1:
+		difficulty_text = "hidden - not yet rolled"
+	elif critical_threshold >= 0:
+		difficulty_text = "%d / %d crit" % [difficulty, critical_threshold]
+	else:
+		difficulty_text = str(difficulty)
+	header.text = "Opportunity %d - %s - Difficulty %s" % [index + 1, " or ".join(skill_names), difficulty_text]
+	header.autowrap_mode = TextServer.AUTOWRAP_WORD
+	row.add_child(header)
+
+	if using_hidden and difficulty == -1:
+		var roll_button := Button.new()
+		roll_button.text = "Roll hidden difficulty (host only - NEVER reveal this to players)"
+		roll_button.pressed.connect(func() -> void: system.roll_hidden_difficulty(game_state.rng))
+		row.add_child(roll_button)
+		return row
+
+	# J and K only. StarSystem's own comment: completed_opportunity_
+	# indices "doesn't apply" to a repeatable opportunity - it's always
+	# available again next turn, so there's nothing meaningful for a
+	# "completed" gate or a Mark Complete button to record here.
+	var repeatable := system.definition().repeatable_each_turn
+	if not repeatable and system.is_opportunity_completed(index):
+		var done_label := Label.new()
+		done_label.text = "COMPLETED - Reward: %s" % opportunity.reward_description
+		done_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+		row.add_child(done_label)
+		return row
+
+	var input_row := HBoxContainer.new()
+	var cards_edit := LineEdit.new()
+	cards_edit.placeholder_text = "assigned cards, e.g. A 5 K 3"
+	cards_edit.custom_minimum_size = Vector2(220, 0)
+	var bonus_label := Label.new()
+	bonus_label.text = "Shuttle bonus"
+	var bonus_spin := SpinBox.new()
+	bonus_spin.min_value = 0
+	bonus_spin.max_value = 20
+	var score_button := Button.new()
+	score_button.text = "Score"
+	input_row.add_child(cards_edit)
+	input_row.add_child(bonus_label)
+	input_row.add_child(bonus_spin)
+	input_row.add_child(score_button)
+	row.add_child(input_row)
+
+	var result_label := Label.new()
+	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	row.add_child(result_label)
+
+	score_button.pressed.connect(func() -> void:
+		var cards := _parse_card_ranks(cards_edit.text)
+		if cards.is_empty() and not cards_edit.text.strip_edges().is_empty():
+			result_label.text = "No valid card ranks recognized - use A, 2-10, J, Q, or K, separated by spaces."
+			return
+		var bonus := int(bonus_spin.value)
+		var total := AwayMissionOpportunity.score(cards, bonus)
+		var success := AwayMissionOpportunity.is_success(total, difficulty)
+		var critical := AwayMissionOpportunity.is_critical(total, critical_threshold)
+		var outcome := "CRITICAL SUCCESS" if critical else ("SUCCESS" if success else "FAILURE")
+		var text := "%s + %d bonus = %d vs difficulty %d -> %s" % [" + ".join(cards), bonus, total, difficulty, outcome]
+		if critical and not opportunity.critical_reward_description.is_empty():
+			text += "\nCritical reward: %s" % opportunity.critical_reward_description
+		else:
+			text += "\nReward: %s" % opportunity.reward_description
+		if using_hidden:
+			text += "  (X = %d)" % (difficulty / 5)
+		result_label.text = text
+	)
+
+	if not repeatable:
+		var complete_button := Button.new()
+		complete_button.text = "Mark Complete"
+		complete_button.pressed.connect(func() -> void: system.complete_opportunity(index))
+		row.add_child(complete_button)
+
+	row.add_child(HSeparator.new())
+	return row
+
+func _parse_card_ranks(text: String) -> Array[String]:
+	var valid: Array[String] = []
+	for token in text.strip_edges().split(" ", false):
+		var rank := token.strip_edges().to_upper()
+		if rank in VALID_CARD_RANKS:
+			valid.append(rank)
+	return valid
 
 ## --- Wolf Attack --------------------------------------------------------
 ## Unlike ships/craft/players, this section rebuilds on every

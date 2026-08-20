@@ -741,13 +741,12 @@ ships to dock at) and is now satisfied.
         legitimate to wire up (a hard capability limit, not a
         deception check), but nothing in the engine tracks the fleet's
         actual current node yet either - a separate piece of work.
-      - An away-mission-running host console section (pick a system and
-        opportunity, enter the card total, see success/crit, apply the
-        reward) and automatic reward *application* to `GameState`.
-        Reward text is fully data-modeled now; nothing yet triggers
-        applying it. Natural next step once someone wants to actually
-        run an away mission through the tool rather than at the table
-        with a pen.
+      - ~~An away-mission-running host console section~~ - **built later,
+        see "Away-mission-running host console section" further down this
+        file** for the full writeup, including the deliberate call NOT to
+        auto-apply rewards to `GameState` (reward text is too
+        heterogeneous - "8 food" and "upgrade 2 weapon consoles" have no
+        common structured shape to apply automatically).
 
       Also fixed in passing: CLAUDE.md's glossary was missing
       `exploration` as a skill (six skills exist, not five) - the
@@ -3348,3 +3347,85 @@ and its tests already existed; this is a `ui/`-only addition, and this
 project's test suite doesn't instantiate `.tscn` Control scenes anywhere,
 same reason `host_console.gd`'s other UI-only additions have gone
 unaccompanied by new test files).
+
+## Done — Away-mission-running host console section
+
+Closes the "natural next step" flagged when the Star Systems data layer
+was first built: reward text and scoring arithmetic were fully modeled,
+but nothing let the host actually run an away mission through the tool.
+
+**`ui/host/host_console.gd`** - a new "Away Missions" top-level section
+(`%AwayMissionsList`), one collapsible panel per star system with real
+opportunities - built by checking `definition.opportunities.is_empty()`
+rather than hardcoding which letters to include, so systems N/O/P (bespoke
+non-card mechanics, still unmodeled) are skipped structurally. 13 panels
+(A-M). Refresh-on-expand, not rebuild-on-mutation - same reasoning as the
+ship/craft/player panels: a card-total `LineEdit` is exactly the kind of
+in-progress typing a background rebuild would destroy.
+
+Per opportunity: skill(s) and difficulty shown for reference, a `LineEdit`
+for the assigned cards ("A 5 K 3", space-separated, invalid tokens
+filtered against the real rank set) and a shuttle-bonus `SpinBox`, a
+**Score** button that computes the total via the exact
+`AwayMissionOpportunity.score()`/`is_success()`/`is_critical()` methods
+already built and tested, and shows the full arithmetic plus the matching
+reward text - never a die roll, never picking a card, exactly CLAUDE.md
+constraint 2's boundary. A separate **Mark Complete** button records the
+outcome via `StarSystem.complete_opportunity()`; scoring is non-
+destructive on its own so the host can preview before committing. Once
+marked, re-expanding the panel shows "COMPLETED - Reward: ..." instead of
+the input controls.
+
+**Three source-model subtleties handled, not glossed over:**
+- **System K's hidden difficulty**: `AwayMissionOpportunity.
+  hidden_until_rolled` gates a "Roll hidden difficulty (host only - NEVER
+  reveal this to players)" button in place of the normal difficulty
+  display until `StarSystem.roll_hidden_difficulty()` has been called;
+  after that, the real rolled value is shown plainly - this is the host
+  console, never broadcast (`GameState.to_public_dict()` already excludes
+  `star_systems` entirely), so there's no leak risk in showing it here,
+  and the host genuinely needs it to adjudicate. The reward text's "X"
+  placeholder is resolved for host convenience (`X = hidden_difficulty /
+  5`) rather than left for the host to do the division themselves.
+- **L/M's Wolf-base gate**: `away_mission_blocked_while_wolf_base_
+  operational` + `StarSystem.wolf_base_destroyed` hide the opportunity
+  rows behind a blocked note and a "Mark Wolf base destroyed" button
+  (`StarSystem.set_wolf_base_destroyed()`, already existed, never had a UI
+  caller either) until the host says the base is actually gone.
+- **J/K's `repeatable_each_turn`**: `StarSystem`'s own doc comment says
+  `completed_opportunity_indices` "doesn't apply" to a repeatable
+  opportunity - so the UI never shows a stale "COMPLETED" state for J/K
+  (they always show the scoring controls, every turn) and never shows a
+  Mark Complete button for them either, since there's nothing meaningful
+  for one to record here.
+
+**Deliberately does NOT auto-apply a reward to `GameState`.** Reward text
+(`star_system_definitions.gd`) is free-form prose transcribed from the
+source table - "8 food" is a simple resource grant, but "Endeavour crosses
+out 1 research box of choice", "upgrade 2 weapon consoles", and "fleet no
+longer takes nebula damage" are host judgment calls with no single
+unambiguous `GameState` mutation to apply automatically, and some
+reference systems this project doesn't model yet (research boxes).
+Parsing some reward strings but not others algorithmically would be worse
+than parsing none - inconsistent behavior a host would have to learn
+case-by-case is worse than a host who always reads the text and applies
+it themselves through this same console's existing per-ship/per-console
+controls, same as they'd read it off a printed card.
+
+**Verified against the real running engine, not just reading the code** -
+two throwaway driving scripts against the real `host_console.tscn`:
+confirmed exactly 13 panels build (N/O/P correctly absent); on System A,
+scored `10 10 J` (correctly 15, FAILURE vs difficulty 17), then
+`10 10 K 5` (correctly 20, SUCCESS), clicked Mark Complete, collapsed and
+re-expanded the panel and confirmed it now shows "COMPLETED - Reward: 8
+food" instead of the input row - a real refresh-on-expand round trip, not
+just an in-memory assertion; on System L, confirmed the blocked note and
+no opportunity rows before destroying the base, then confirmed all 3 rows
+appear after clicking Mark Wolf base destroyed; on System K, confirmed
+only the Roll button shows pre-roll, clicked it, confirmed the real
+`StarSystem.hidden_difficulty` came back as `10` (X=2) and the panel
+displayed "10 / 20 crit", then scored `K K K K K K` (correctly -30,
+FAILURE) with the reward text correctly showing "(X = 2)". 50 test files
+still green - no new file, since this project's suite doesn't instantiate
+`.tscn` Control scenes anywhere (same as the Combat Table trigger UI and
+Wolf Attack TV work above); verification was the driving scripts.

@@ -74,6 +74,12 @@ text = "Add Player"
 [node name="PlayersList" type="VBoxContainer" parent="Scroll/VBoxContainer"]
 unique_name_in_owner = true
 
+[node name="AwayMissionsLabel" type="Label" parent="Scroll/VBoxContainer"]
+text = "Away Missions (click to expand) - card assignment stays a table negotiation; this only automates the scoring arithmetic, per CLAUDE.md constraint 2"
+
+[node name="AwayMissionsList" type="VBoxContainer" parent="Scroll/VBoxContainer"]
+unique_name_in_owner = true
+
 [node name="WolfAttackLabel" type="Label" parent="Scroll/VBoxContainer"]
 text = "Wolf Attack"
 
