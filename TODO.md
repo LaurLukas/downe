@@ -564,7 +564,8 @@ ships to dock at) and is now satisfied.
       result on. Fighter Wings/Maliades/Highwall already had working
       dice rolls via the existing `combat_table` ability from an earlier
       session; wiring that into this UI as a convenience button was
-      explicitly deferred rather than built into this pass.
+      explicitly deferred rather than built into this pass. **Built
+      later** - see "Combat Table trigger UI" further down this file.
 
       Unlike every other host console section, this one rebuilds its
       entire subtree on every `GameState.mutated` rather than
@@ -3209,19 +3210,22 @@ already saw).
       obvious enough to guess at - asked the user rather than silently
       picking a side either way. **Answer: skip Phase 6 for this pass.**
 
-      Two more reasons this needed a real decision, not just "build it
+      One more reason this needed a real decision, not just "build it
       carefully": the STANDING layout is a pixel-precise, previously
       user-reviewed screen (v1/v2/v3 passes, each iterated against actual
       human visual feedback) with no free space left in its safe-margin
       canvas for a new element without a real design pass - see
       `ui/tv/wolf_attack_display.tscn`, `CannotBeTargetedRow` already sits
-      right at `SAFE_MARGIN_BOTTOM`. And separately, nothing in the game
-      currently triggers a `weapon_fire` roll at all yet -
-      `CombatTableAbility`'s execute() has no caller anywhere in `ui/`,
-      per this file's own Wolf Attack system section above ("wiring that
-      into this UI as a convenience button was explicitly deferred") -
-      so there's no live path to verify this against even structurally
-      right now.
+      right at `SAFE_MARGIN_BOTTOM`.
+
+      **Update**: the other reason this note originally gave - "nothing
+      in the game triggers a `weapon_fire` roll yet" - no longer holds.
+      The Combat Table trigger UI (below) now lets the host fire
+      Maliades/Highwall/fighter wings for real during a live attack, so
+      there's a genuine live source of `weapon_fire` rolls to mirror if
+      Phase 6 gets picked back up. The P0-08-vs-§8 design question is
+      still exactly as open as before - this only removes the "nothing
+      to even test against" part of the blocker, not the actual decision.
 
       If this gets picked back up later: reconcile with the P0-08 author's
       intent first (is a settled-outcome feed actually different from a
@@ -3254,9 +3258,14 @@ gap in this engine.
 4. Survivor loss per point of damage - already an open project-wide
    blocker (see the Wolf Attack system section above); also blocks riot
    outcome text once Small Ships exist.
-5. Who triggers a Wolf Attack weapon roll - the ship's own terminal, or the
-   host at the battle map? Affects whether Phase 4's `roll_request` needs
-   an authorization check specifically on `weapon_fire`.
+5. ~~Who triggers a Wolf Attack weapon roll~~ - **answered by building
+   it**: the host, at the battle map, via the new Combat Table trigger UI
+   (see below) - matches CLAUDE.md constraint 3 (Wolf Attacks are a
+   physical gathering the host runs) and the same reasoning the rest of
+   this section already applies to boarding/retargeting. `weapon_fire`
+   was never added to `net/message_router.gd`'s `roll_request` registry
+   as a result - a ship terminal still can't request one directly, on
+   purpose, not as a gap.
 6. `salvage_drones` needs the Wolf Attack module to expose a combined
    both-sides damage total - not confirmed to exist in
    `core/combat/wolf_attack.gd` yet. Moot regardless until R.S.S. Warrior
@@ -3271,3 +3280,52 @@ gap in this engine.
 and can start immediately. Phase 4 touches two of the open questions above
 (override authorization, the `source` field) worth settling before writing
 protocol code that would need to change shape after the fact.
+
+## Done — Combat Table trigger UI (the Wolf Attack system's own deferred piece)
+
+Closes the gap the Wolf Attack system section (above) flagged when
+`CombatTableAbility` was first built: Maliades, Highwall, and the three
+fighter wings all had working dice arithmetic, but nothing in `ui/` ever
+called `execute()` on the ability - the only way to fire it was a test file.
+
+**`ui/host/host_console.gd`** - a new "Combat Table" subsection inside the
+Wolf Attack section, visible only during `RANGE_MEDIUM`/`RANGE_SHORT`
+(`CombatTableAbility.RangeBand` has no LONG option at all - nothing fires
+at long range per the rules, so there's nothing to show outside those two
+phases). One row per craft (`COMBAT_TABLE_CRAFT_IDS`): a craft that
+`can_execute()` denies shows its exact denial reason inline (no fuel, no
+charged bay, already destroyed) and no Fire button at all, rather than a
+button that would just fail; an available craft gets a Fire button whose
+result label shows the individual dice faces plus `RollText.describe()`'s
+outcome sentence - reusing the Dice Engine work above rather than
+inventing a second way to render a roll - with self-damage/fighters-lost/
+destroyed appended when they apply.
+
+Uses the exact same `AbilityRegistry.get_ability("combat_table")` /
+`can_execute()` / `execute()` path `combat_table_test.gd` already exercises
+- no new core/ code, this is purely the missing `ui/` caller. Rolls go
+through `game_state.roll_service` (Dice Engine Phase 3's migration), so
+every Combat Table fire from this UI is captured in the shared audit log
+like any other catalogued roll, with no extra wiring needed here.
+
+Resolves Dice Engine open question 5 ("who triggers a Wolf Attack weapon
+roll") as "the host, at the battle map" - see that entry above.
+`weapon_fire` was deliberately not added to `net/message_router.gd`'s
+`roll_request` registry as a result; a ship terminal still can't request
+one, which matches this answer rather than being an oversight.
+
+**Verified against the real running engine, not just reading the code**: a
+throwaway driving script instantiated the real `host_console.tscn`, started
+a live `WolfAttack`, confirmed the Combat Table section is absent during
+`INCOMING` and appears with the correct phase label once advanced to
+`RANGE_MEDIUM`, confirmed Highwall (unfuelled) shows its real
+`can_execute()` denial text with no Fire button, then fired the real
+Maliades Fire button once - confirmed the resulting self-damage applied to
+the live `CraftState`, the result label rendered `"[3] -> 0 hits - 1
+self-damage"` (an actual rolled face, not a fixture), and the roll landed
+in `game_state.roll_log` under `weapon_fire`. Full suite still green, 50
+test files, no new test files needed (no new `core/` logic - the ability
+and its tests already existed; this is a `ui/`-only addition, and this
+project's test suite doesn't instantiate `.tscn` Control scenes anywhere,
+same reason `host_console.gd`'s other UI-only additions have gone
+unaccompanied by new test files).

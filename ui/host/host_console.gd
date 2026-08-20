@@ -554,6 +554,14 @@ func _best_guess_local_ip() -> String:
 const WOLF_CLASS_LABELS: Array[String] = [
 	"Battlestation", "Strikecarrier", "Cruiser", "Destroyer", "Fighter Wing", "Assault Transport",
 ]
+## The only craft with a "combat_table" ability (see that ability's own
+## file comment) - Maliades, Highwall, and the three fighter wings.
+## Triggering their rolls was explicitly deferred when the ability
+## itself was first built (see TODO.md's Wolf Attack system section) -
+## this is that deferred piece.
+const COMBAT_TABLE_CRAFT_IDS: Array[String] = [
+	"maliades", "highwall", "fighter_wing_alpha", "fighter_wing_bravo", "pdf_escort_wing",
+]
 const WOLF_PHASE_LABELS: Dictionary[WolfAttack.Phase, String] = {
 	WolfAttack.Phase.INCOMING: "Incoming",
 	WolfAttack.Phase.TARGETING: "Targeting",
@@ -620,6 +628,12 @@ func _rebuild_wolf_attack_section() -> void:
 	for id: String in attack.wolf_ships:
 		_wolf_attack_section.add_child(_build_wolf_ship_row(attack, attack.wolf_ships[id]))
 
+	# combat_table only knows MEDIUM/SHORT (CombatTableAbility.RangeBand
+	# has no LONG option at all - nothing fires at long range per the
+	# rules), so this section only makes sense during those two phases.
+	if attack.phase in [WolfAttack.Phase.RANGE_MEDIUM, WolfAttack.Phase.RANGE_SHORT]:
+		_wolf_attack_section.add_child(_build_combat_table_section(attack))
+
 	if attack.phase == WolfAttack.Phase.BOARDING:
 		_wolf_attack_section.add_child(_build_boarding_section(attack))
 
@@ -671,6 +685,70 @@ func _build_wolf_ship_row(attack: WolfAttack, ship: WolfShipState) -> Control:
 		row.add_child(target_row)
 
 	return row
+
+## The deferred piece from the Wolf Attack system's original build -
+## Maliades/Highwall/fighter wings already had working dice arithmetic
+## via CombatTableAbility, but nothing anywhere called execute() on it.
+## Rolls go through the ability exactly as combat_table_test.gd already
+## exercises it - can_execute()'s reason surfaces directly if a craft
+## can't fight right now (no fuel, no charged bay, already destroyed),
+## and execute() now returns the full stamped roll result (Dice Engine
+## Phase 3), so this can show individual faces via RollText.describe()
+## the same way the Dice Log section does.
+func _build_combat_table_section(attack: WolfAttack) -> Control:
+	var section := VBoxContainer.new()
+	var label := Label.new()
+	label.text = "Combat Table - %s range" % ("Medium" if attack.phase == WolfAttack.Phase.RANGE_MEDIUM else "Short")
+	section.add_child(label)
+
+	var range_band := CombatTableAbility.RangeBand.MEDIUM if attack.phase == WolfAttack.Phase.RANGE_MEDIUM else CombatTableAbility.RangeBand.SHORT
+	var ability := AbilityRegistry.get_ability("combat_table")
+	for craft_id: String in COMBAT_TABLE_CRAFT_IDS:
+		section.add_child(_build_combat_table_row(ability, craft_id, range_band))
+
+	return section
+
+func _build_combat_table_row(ability: Ability, craft_id: String, range_band: CombatTableAbility.RangeBand) -> Control:
+	var row := HBoxContainer.new()
+	var definition := CraftDefinitions.get_definition(craft_id)
+	var name_label := Label.new()
+	name_label.text = definition.display_name if definition != null else craft_id
+	name_label.custom_minimum_size = Vector2(220, 0)
+	row.add_child(name_label)
+
+	var check := ability.can_execute(game_state, craft_id, {"range": range_band})
+	if not check.ok:
+		var reason_label := Label.new()
+		reason_label.text = "unavailable - %s" % check.reason
+		row.add_child(reason_label)
+		return row
+
+	var result_label := Label.new()
+	var fire_button := Button.new()
+	fire_button.text = "Fire"
+	fire_button.pressed.connect(func() -> void:
+		result_label.text = _describe_combat_table_result(ability.execute(game_state, craft_id, {"range": range_band}))
+	)
+	row.add_child(fire_button)
+	row.add_child(result_label)
+	return row
+
+func _describe_combat_table_result(result: AbilityResult) -> String:
+	if not result.ok:
+		return result.reason
+	var data: Dictionary = result.data
+	var faces: PackedInt32Array = data.get("faces", PackedInt32Array())
+	var face_strings: Array[String] = []
+	for face in faces:
+		face_strings.append(str(face))
+	var text := "[%s] -> %s" % [", ".join(face_strings), RollText.describe(data)]
+	if int(data.get("self_damage", 0)) > 0:
+		text += " - %d self-damage" % int(data["self_damage"])
+	if int(data.get("fighters_lost", 0)) > 0:
+		text += " - %d fighter(s) lost" % int(data["fighters_lost"])
+	if data.get("destroyed", false):
+		text += " - DESTROYED"
+	return text
 
 func _build_boarding_section(attack: WolfAttack) -> Control:
 	var section := VBoxContainer.new()
