@@ -38,7 +38,17 @@ func find_by_id(id: int) -> Dictionary:
 func to_dict() -> Dictionary:
 	return {"entries": entries.duplicate(true)}
 
+## JSON has no packed-array type, so a real save/load round-trip
+## through Persistence (JSON.stringify -> JSON.parse_string) turns
+## "faces" back into a plain Array, not the PackedInt32Array every
+## in-memory roll actually produces - GDScript's `==` operator throws a
+## script error comparing the two (not just false), rather than
+## silently mismatching, so this normalizes back to PackedInt32Array on
+## load instead of leaving mixed types sitting in the same log.
 func load_from_dict(data: Dictionary) -> void:
 	entries.clear()
 	for entry: Dictionary in data.get("entries", []):
-		entries.append(entry)
+		var restored := entry.duplicate()
+		if restored.has("faces"):
+			restored["faces"] = PackedInt32Array(restored["faces"])
+		entries.append(restored)

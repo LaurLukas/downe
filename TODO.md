@@ -3005,6 +3005,37 @@ already saw).
       keys, round-tripped through `from_dict()`, confirmed the live and
       reloaded dice streams agree on their next two rolls, and confirmed a
       third roll after reload gets sequence id 3, not a reused 1.
+
+      **A real bug this "verification" missed, caught one phase later
+      while building Phase 4's JSON encoding**: everything above only
+      ever passed `state.to_dict()`'s output straight to `GameState.
+      from_dict()` *in memory* - never through the actual
+      `JSON.stringify()`/`JSON.parse_string()` round trip
+      `net/persistence.gd`'s real save/load path uses. `Dice.serialise()`
+      stored `rng.state` (a full 64-bit int) as a raw JSON number; a real
+      value like `5288669666918256702` came back from `JSON.parse_string()`
+      as the *float* `5288669666918256640.0` - silently wrong by 62, past
+      what a JSON double's 53-bit mantissa can hold exactly. That's
+      exactly the failure spec §6 names as "the single worst thing this
+      module could do" (a restart that resumes from the wrong point,
+      indistinguishable from a reroll) - and it would have shipped, since
+      nothing in the test suite exercised the real file-write path for
+      this field until it was written specifically to check. Fixed by
+      encoding `seed`/`state` as strings (verified losslessly round-
+      tripping a 64-bit value through both `int()`/`str()` and a real
+      `JSON.stringify()`/`parse_string()` pass) - and applied the same fix
+      to the pre-existing, unrelated `rng_seed` field two lines away,
+      which had the identical latent bug from before this session touched
+      the file. A second, smaller issue surfaced the same way: JSON has no
+      packed-array type, so a real round trip turns a logged roll's
+      `faces` back into a plain `Array`; GDScript's `==` throws a script
+      error comparing that to a `PackedInt32Array` literal rather than
+      just returning false, so `RollLog.load_from_dict()` now normalizes
+      `faces` back to `PackedInt32Array` on load. Two new tests in
+      `tests/net/persistence_test.gd` exercise the real
+      `Persistence.save()`/`load_dict()` file path specifically (not the
+      in-memory dict hand-off the rest of this phase's tests use) - would
+      have caught both issues. 49 test files still green.
 - [x] **Phase 3 — migrated the raw-rng call sites onto `RollService`.**
       `MaintenanceCycle.roll_unrest_gain()`/`roll_riot_damage()` now call
       `game_state.roll_service.roll_sum_band()`/`roll_raw()` instead of

@@ -66,8 +66,21 @@ static func classify_count_successes(faces: PackedInt32Array, target: int) -> Di
 ## seed + state together let restore() resume the exact stream position -
 ## seed alone (what GameState.rng persists today for the *other* stream)
 ## would replay from the start instead of from where play actually was.
+##
+## Both are encoded as strings, not raw JSON numbers - a real bug found
+## by testing the actual Persistence.save()/load_dict() path (JSON.
+## stringify -> JSON.parse_string), not just passing to_dict()'s output
+## straight to from_dict() in memory: seed/state are full 64-bit ints,
+## and Godot's JSON parser returns numbers without a decimal point as
+## int ONLY when they fit a double's 53-bit mantissa - a real
+## RandomNumberGenerator.state value like 5288669666918256702 silently
+## came back as the float 5288669666918256640.0, restoring a stream
+## that merely started NEAR the right point, not at it. That's exactly
+## the "host restart silently rerolls" failure spec §6 calls "the
+## single worst thing this module could do" - a wrong-by-62 restore is
+## just as bad as no restore at all. String round-trips losslessly.
 func serialise() -> Dictionary:
-	return {"seed": _rng.seed, "state": _rng.state}
+	return {"seed": str(_rng.seed), "state": str(_rng.state)}
 
 func restore(data: Dictionary) -> void:
 	_rng.seed = int(data.get("seed", _rng.seed))

@@ -183,7 +183,13 @@ func to_dict() -> Dictionary:
 		"pursuit_track": pursuit_track.to_dict(),
 		"chart_in_play": chart_in_play,
 		"turn": turn_manager.to_dict(),
-		"rng_seed": rng.seed,
+		# str(), not the raw int - see Dice.serialise()'s comment for the
+		# real bug this avoids: a full 64-bit seed round-tripped through
+		# JSON.stringify/parse_string silently corrupts to the nearest
+		# representable float once it exceeds a double's 53-bit mantissa.
+		# Found by testing this exact field's real save/load path, not
+		# just to_dict() -> from_dict() in memory.
+		"rng_seed": str(rng.seed),
 		"dice": dice_engine.serialise(),
 		"roll_log": roll_log.to_dict(),
 		"roll_sequence": roll_service.sequence(),
