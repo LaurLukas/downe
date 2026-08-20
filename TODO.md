@@ -3005,13 +3005,47 @@ already saw).
       keys, round-tripped through `from_dict()`, confirmed the live and
       reloaded dice streams agree on their next two rolls, and confirmed a
       third roll after reload gets sequence id 3, not a reused 1.
-- [ ] **Phase 3 — migrate the three existing raw-rng call sites onto
-      `RollService`.** `MaintenanceCycle.roll_unrest_gain()`/
-      `roll_riot_damage()` and `CombatTableAbility`'s three resolvers.
-      Behavior-preserving - same dice counts, same thresholds - the change
-      is that individual faces get captured, stamped, and logged for rolls
-      that already happen today. Existing tests for these should still
-      pass on outcome; add face-level assertions.
+- [x] **Phase 3 — migrated the raw-rng call sites onto `RollService`.**
+      `MaintenanceCycle.roll_unrest_gain()`/`roll_riot_damage()` now call
+      `game_state.roll_service.roll_sum_band()`/`roll_raw()` instead of
+      `game_state.rng.randi_range()` directly; `CombatTableAbility`'s three
+      resolvers (Maliades, Highwall, fighter wings) all reduce cleanly onto
+      one `roll_count_successes()` call each - Maliades' and the fighter
+      wings' "whatever doesn't hit causes self-damage/fighter loss" turned
+      out to be exactly `dice_count - successes` in both cases, and the
+      fighter wing's old per-fighter loop (one die at a time) became a
+      single `roll_count_successes(..., fighter_count, target)` call - same
+      total dice, one audit-log entry instead of `fighter_count` of them.
+      Behavior-preserving throughout - same dice counts, same thresholds/
+      targets - the actual change is that every one of these rolls now
+      gets individual-face capture, a stamped id/reason/ship/turn, and an
+      audit-log entry, per spec constraint 4.
+
+      `game_state.rng` (the original, separate stream) is now untouched by
+      any of these five call sites; `combat_table.gd` no longer references
+      it at all. Existing tests updated where they depended on the old
+      shape: `maintenance_cycle_test.gd`'s threshold test used to seed
+      `game_state.rng` and probe it with a matching `RandomNumberGenerator`
+      to force exact totals - now does the same trick against
+      `state.dice_engine`/a probe `Dice` instance instead, since that's the
+      stream these rolls actually consume now. `combat_table_test.gd` had
+      one dead `state.rng.seed = 1` line (harmless - the assertion was
+      already seed-independent - but misleading now) removed. 4 new tests
+      confirm the migration actually landed: each call site's roll now
+      shows up in `game_state.roll_log` with the right reason key
+      (`maintenance_unrest`/`maintenance_riot`/`weapon_fire`) and, for the
+      2d6 unrest roll, two individual faces rather than a bare total.
+
+      `ui/host/host_console.gd`'s unrest-roll display line was updated to
+      print both individual d6 faces plus the ration modifier
+      (`"rolled 4 + 4 + 5 rations = 13 -> +1 unrest"`) instead of a single
+      pre-summed "dice" number - the riot-roll line needed no change, its
+      `result["roll"]`/`result["unrest"]` keys are unchanged by the
+      migration. 49 test files still green; also verified against the
+      real engine headlessly (not just unit tests): rolled unrest, riot,
+      and a Highwall weapon_fire in sequence against a real
+      `FleetSetup`/`CraftSetup` state and confirmed the format strings
+      render correctly and all three land in `roll_log`.
 - [ ] **Phase 4 — net protocol.** `roll_request`/`roll_result`/
       `roll_override` (spec §7) added to `net/message_router.gd` alongside
       its existing two handlers. Needs a design decision first: `net/` has

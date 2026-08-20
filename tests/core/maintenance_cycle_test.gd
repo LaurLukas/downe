@@ -65,31 +65,47 @@ func test_roll_unrest_gain_thresholds() -> void:
 	# so no fixed bonus forces a bucket on its own - a bonus chosen to
 	# survive the highest dice roll could still fall through the floor
 	# on the lowest. Instead: learn the exact next roll from a
-	# same-seeded probe rng, then pick bonuses relative to that known
-	# roll to land exactly on each threshold, resetting the seed before
-	# each call so the real roll matches the probe every time.
+	# same-seeded probe Dice, then pick bonuses relative to that known
+	# roll to land exactly on each threshold, resetting
+	# state.dice_engine to the same fresh snapshot before each call so
+	# the real roll matches the probe every time.
 	var state := _build_state()
 	var ship := state.get_ship("aegis")
 
-	state.rng.seed = 99
-	var probe := RandomNumberGenerator.new()
-	probe.seed = 99
-	var dice := probe.randi_range(1, 6) + probe.randi_range(1, 6)
+	var probe := Dice.new(99)
+	var fresh_snapshot := probe.serialise()
+	var probe_faces := probe.roll(2)
+	var dice: int = probe_faces[0] + probe_faces[1]
 
-	state.rng.seed = 99
+	state.dice_engine.restore(fresh_snapshot)
 	ship.set_unrest(0)
 	var low := MaintenanceCycle.roll_unrest_gain(state, "aegis", -dice - 1)
 	assert_eq(low["unrest_gain"], 2, "a total forced under 12 should gain +2")
 
-	state.rng.seed = 99
+	state.dice_engine.restore(fresh_snapshot)
 	ship.set_unrest(0)
 	var mid := MaintenanceCycle.roll_unrest_gain(state, "aegis", 12 - dice)
 	assert_eq(mid["unrest_gain"], 1, "a total of exactly 12 should gain +1")
 
-	state.rng.seed = 99
+	state.dice_engine.restore(fresh_snapshot)
 	ship.set_unrest(0)
 	var high := MaintenanceCycle.roll_unrest_gain(state, "aegis", 20 - dice)
 	assert_eq(high["unrest_gain"], 0, "a total of exactly 20 should gain nothing")
+
+func test_roll_unrest_gain_logs_individual_faces_via_roll_service() -> void:
+	var state := _build_state()
+	MaintenanceCycle.roll_unrest_gain(state, "aegis", 5)
+	assert_eq(state.roll_log.entries.size(), 1, "the unrest roll should be captured in the shared audit log")
+	var entry: Dictionary = state.roll_log.entries[0]
+	assert_eq(entry["reason"], "maintenance_unrest", "the logged reason should match the dice catalogue's key")
+	assert_eq(entry["ship"], "aegis", "the logged entry should be stamped with the rolling ship")
+	assert_eq((entry["faces"] as PackedInt32Array).size(), 2, "2d6 should log two individual faces, not just a total")
+
+func test_roll_riot_damage_logs_via_roll_service() -> void:
+	var state := _build_state()
+	MaintenanceCycle.roll_riot_damage(state, "dione")
+	assert_eq(state.roll_log.entries.size(), 1, "the riot roll should be captured in the shared audit log")
+	assert_eq(state.roll_log.entries[0]["reason"], "maintenance_riot", "the logged reason should match the dice catalogue's key")
 
 func test_roll_riot_damage_reflects_current_unrest() -> void:
 	var state := _build_state()

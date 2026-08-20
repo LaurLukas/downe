@@ -312,7 +312,8 @@ func _build_maintenance_cycle_section(ship: Ship, refreshers: Array[Callable]) -
 		var result := MaintenanceCycle.roll_unrest_gain(game_state, ship.id, ration_bonus[0])
 		ship.mark_maintenance_step_complete(MaintenanceCycle.Step.UNREST_ROLL)
 		refresh_checklist.call()
-		return "rolled %d + %d = %d -> +%d unrest" % [result["dice"], result["ration_bonus"], result["total"], result["unrest_gain"]]
+		var faces: PackedInt32Array = result["faces"]
+		return "rolled %d + %d + %d rations = %d -> +%d unrest" % [faces[0], faces[1], result["modifier"], result["total"], result["unrest_gain"]]
 	))
 
 	# Step 4: riot roll. Which console takes the damage is drawn from

@@ -78,19 +78,19 @@ func _has_charged_bay(game_state: GameState, craft_id: String, definition: Craft
 
 ## Medium: 1 die, 4+ hits for 1 damage; 1-3 instead deals this craft 1
 ## self-damage. Short: 2 dice, each 2+ hits for 1 damage, each 1 deals
-## 1 self-damage.
+## 1 self-damage. Both reduce to count_successes at the hit target -
+## whatever doesn't succeed is what deals self-damage instead - rolled
+## through the shared dice engine's "weapon_fire" reason key
+## (docs/dice_engine_spec.md §4) so these rolls get individual-face
+## capture and an audit-log entry like every other catalogued roll.
 func _resolve_maliades(game_state: GameState, craft_state: CraftState, range_band: RangeBand) -> AbilityResult:
-	var hits := 0
-	var self_damage := 0
 	var dice_count := 1 if range_band == RangeBand.MEDIUM else 2
-	var self_damage_on_or_below := 3 if range_band == RangeBand.MEDIUM else 1
-
-	for i in dice_count:
-		var roll := game_state.rng.randi_range(1, 6)
-		if roll <= self_damage_on_or_below:
-			self_damage += 1
-		else:
-			hits += 1
+	var hit_target := 4 if range_band == RangeBand.MEDIUM else 2
+	var result := game_state.roll_service.roll_count_successes(
+		"weapon_fire", "maliades", game_state.turn_manager.turn_number, dice_count, hit_target
+	)
+	var hits: int = result["successes"]
+	var self_damage := dice_count - hits
 
 	if self_damage > 0:
 		craft_state.set_combat_damage(craft_state.combat_damage + self_damage)
@@ -107,28 +107,26 @@ func _resolve_maliades(game_state: GameState, craft_state: CraftState, range_ban
 ## Both ranges: 1 die, 5+ hits for 3 damage. No self-damage - Highwall
 ## has no stated damage track.
 func _resolve_highwall(game_state: GameState, _range_band: RangeBand) -> AbilityResult:
-	var roll := game_state.rng.randi_range(1, 6)
-	var hit := roll >= 5
+	var result := game_state.roll_service.roll_count_successes(
+		"weapon_fire", "highwall", game_state.turn_manager.turn_number, 1, 5
+	)
+	var hit: bool = result["successes"] > 0
 	return AbilityResult.success({"hits": 1 if hit else 0, "damage_dealt": 3 if hit else 0})
 
 ## Per fighter, medium: 1 die, 5+ hits for 1 damage. Short: 1 die, 3+
 ## hits for 1 damage, 1-2 instead destroys that fighter. Assumes every
 ## fighter attacks rather than shifting a Wolf ship's target number -
-## the target-shift choice isn't modeled (see class comment).
+## the target-shift choice isn't modeled (see class comment). One
+## count_successes call rolls one die per fighter at once, rather than
+## fighter_count separate single-die rolls - same total dice, one
+## audit-log entry instead of fighter_count of them.
 func _resolve_fighter_wing(game_state: GameState, craft_state: CraftState, range_band: RangeBand) -> AbilityResult:
-	var hits := 0
-	var fighters_lost := 0
-
-	for i in craft_state.fighter_count:
-		var roll := game_state.rng.randi_range(1, 6)
-		if range_band == RangeBand.MEDIUM:
-			if roll >= 5:
-				hits += 1
-		else:
-			if roll <= 2:
-				fighters_lost += 1
-			else:
-				hits += 1
+	var hit_target := 5 if range_band == RangeBand.MEDIUM else 3
+	var result := game_state.roll_service.roll_count_successes(
+		"weapon_fire", craft_state.id, game_state.turn_manager.turn_number, craft_state.fighter_count, hit_target
+	)
+	var hits: int = result["successes"]
+	var fighters_lost := craft_state.fighter_count - hits if range_band == RangeBand.SHORT else 0
 
 	if fighters_lost > 0:
 		craft_state.set_fighter_count(craft_state.fighter_count - fighters_lost)

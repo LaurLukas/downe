@@ -61,9 +61,22 @@ func test_highwall_requires_fuel_to_attend_combat_table() -> void:
 func test_highwall_deals_three_damage_on_a_hit() -> void:
 	var state := _build_game_state()
 	state.get_craft("highwall").set_fuelled(true)
-	state.rng.seed = 1
 	var ability := AbilityRegistry.get_ability("combat_table")
 	var result := ability.execute(state, "highwall", {"range": 0})
 	assert_true(result.ok, "should execute")
 	var damage: int = result.data["damage_dealt"]
 	assert_true(damage == 0 or damage == 3, "Highwall should deal either 0 or exactly 3 damage per die")
+
+func test_combat_table_rolls_go_through_the_shared_dice_engine() -> void:
+	# Migrated in Dice Engine Phase 3 - combat_table no longer touches
+	# game_state.rng at all; every weapon_fire roll should be captured
+	# in the shared audit log like every other catalogued roll.
+	var state := _build_game_state()
+	state.get_craft("highwall").set_fuelled(true)
+	var ability := AbilityRegistry.get_ability("combat_table")
+
+	ability.execute(state, "highwall", {"range": 0})
+
+	assert_eq(state.roll_log.entries.size(), 1, "a combat_table roll should be captured in the shared audit log")
+	assert_eq(state.roll_log.entries[0]["reason"], "weapon_fire", "the logged reason should match the dice catalogue's key")
+	assert_eq(state.roll_log.entries[0]["ship"], "highwall", "the logged entry should be stamped with the rolling craft")

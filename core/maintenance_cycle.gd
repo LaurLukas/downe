@@ -107,36 +107,48 @@ static func spend_rations(game_state: GameState, ship_id: String, food_level: in
 	ship.resources.add(ResourceStock.Kind.WATER, -water_cost)
 	return RATION_BONUS[food_level] + RATION_BONUS[water_level]
 
-## Step 3: roll 2d6 + the ration bonus from step 2. Under 12 -> +2
-## unrest. Under 20 (but >= 12) -> +1 unrest. 20+ -> no gain. Applies
-## the gain directly and returns the roll details for display.
+## Step 3: roll 2d6 through the shared dice engine (docs/
+## dice_engine_spec.md's "maintenance_unrest" reason key) + the ration
+## bonus from step 2. Under 12 -> +2 unrest. Under 20 (but >= 12) -> +1
+## unrest. 20+ -> no gain. Applies the gain directly and returns the
+## stamped roll result (individual faces, not just the total - spec
+## constraint 4: "the arithmetic is shown, not just the answer") plus
+## unrest_gain.
+const UNREST_THRESHOLDS: PackedInt32Array = [12, 20]
+
 static func roll_unrest_gain(game_state: GameState, ship_id: String, ration_bonus: int) -> Dictionary:
 	var ship := game_state.get_ship(ship_id)
 	if ship == null:
 		return {}
-	var dice := game_state.rng.randi_range(1, 6) + game_state.rng.randi_range(1, 6)
-	var total := dice + ration_bonus
+	var result := game_state.roll_service.roll_sum_band(
+		"maintenance_unrest", ship_id, game_state.turn_manager.turn_number, 2, ration_bonus, UNREST_THRESHOLDS
+	)
 	var gain := 0
-	if total < 12:
+	if result["band"] == 0:
 		gain = 2
-	elif total < 20:
+	elif result["band"] == 1:
 		gain = 1
 	if gain > 0:
 		ship.set_unrest(ship.unrest + gain)
-	return {"dice": dice, "ration_bonus": ration_bonus, "total": total, "unrest_gain": gain}
+	result["unrest_gain"] = gain
+	return result
 
-## Step 4: roll 1d6; if it's lower than the ship's *current* unrest, the
-## ship takes 1 damage from rioting. Which console specifically is
-## drawn from the ship's physical damage deck - see class comment; the
-## host marks it via the existing per-console override once this
-## returns whether a hit landed.
+## Step 4: roll 1d6 through the shared dice engine ("maintenance_riot");
+## if it's lower than the ship's *current* unrest, the ship takes 1
+## damage from rioting. Which console specifically is drawn from the
+## ship's physical damage deck - see class comment; the host marks it
+## via the existing per-console override once this returns whether a
+## hit landed.
 static func roll_riot_damage(game_state: GameState, ship_id: String) -> Dictionary:
 	var ship := game_state.get_ship(ship_id)
 	if ship == null:
 		return {}
-	var roll := game_state.rng.randi_range(1, 6)
-	var damaged := roll < ship.unrest
-	return {"roll": roll, "unrest": ship.unrest, "damaged": damaged}
+	var result := game_state.roll_service.roll_raw("maintenance_riot", ship_id, game_state.turn_manager.turn_number, 1)
+	var roll: int = result["faces"][0]
+	result["roll"] = roll
+	result["unrest"] = ship.unrest
+	result["damaged"] = roll < ship.unrest
+	return result
 
 ## Step 5 reference numbers only - charging a specific console is still
 ## the host/player's choice, done through the existing per-console
