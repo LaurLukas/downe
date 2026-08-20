@@ -120,18 +120,22 @@ static func roll_unrest_gain(game_state: GameState, ship_id: String, ration_bonu
 	var ship := game_state.get_ship(ship_id)
 	if ship == null:
 		return {}
-	var result := game_state.roll_service.roll_sum_band(
-		"maintenance_unrest", ship_id, game_state.turn_manager.turn_number, 2, ration_bonus, UNREST_THRESHOLDS
+	# Applying the gain inside the augment callback (rather than after
+	# roll_sum_band() returns) means the mutation lands before the roll
+	# is logged/broadcast, not in a second mutated/save/broadcast cycle
+	# right behind it - see RollService._stamp()'s comment.
+	return game_state.roll_service.roll_sum_band(
+		"maintenance_unrest", ship_id, game_state.turn_manager.turn_number, 2, ration_bonus, UNREST_THRESHOLDS,
+		func(result: Dictionary) -> void:
+			var gain := 0
+			if result["band"] == 0:
+				gain = 2
+			elif result["band"] == 1:
+				gain = 1
+			if gain > 0:
+				ship.set_unrest(ship.unrest + gain)
+			result["unrest_gain"] = gain
 	)
-	var gain := 0
-	if result["band"] == 0:
-		gain = 2
-	elif result["band"] == 1:
-		gain = 1
-	if gain > 0:
-		ship.set_unrest(ship.unrest + gain)
-	result["unrest_gain"] = gain
-	return result
 
 ## Step 4: roll 1d6 through the shared dice engine ("maintenance_riot");
 ## if it's lower than the ship's *current* unrest, the ship takes 1
@@ -143,12 +147,18 @@ static func roll_riot_damage(game_state: GameState, ship_id: String) -> Dictiona
 	var ship := game_state.get_ship(ship_id)
 	if ship == null:
 		return {}
-	var result := game_state.roll_service.roll_raw("maintenance_riot", ship_id, game_state.turn_manager.turn_number, 1)
-	var roll: int = result["faces"][0]
-	result["roll"] = roll
-	result["unrest"] = ship.unrest
-	result["damaged"] = roll < ship.unrest
-	return result
+	# "damaged" needs the ship's current unrest to mean anything - that's
+	# context RollService deliberately doesn't have (it only knows dice),
+	# so it's supplied here via the augment callback rather than added
+	# after the roll already logged/broadcast without it.
+	return game_state.roll_service.roll_raw(
+		"maintenance_riot", ship_id, game_state.turn_manager.turn_number, 1,
+		func(result: Dictionary) -> void:
+			var roll: int = result["faces"][0]
+			result["roll"] = roll
+			result["unrest"] = ship.unrest
+			result["damaged"] = roll < ship.unrest
+	)
 
 ## Step 5 reference numbers only - charging a specific console is still
 ## the host/player's choice, done through the existing per-console

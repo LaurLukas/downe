@@ -86,32 +86,38 @@ func _has_charged_bay(game_state: GameState, craft_id: String, definition: Craft
 func _resolve_maliades(game_state: GameState, craft_state: CraftState, range_band: RangeBand) -> AbilityResult:
 	var dice_count := 1 if range_band == RangeBand.MEDIUM else 2
 	var hit_target := 4 if range_band == RangeBand.MEDIUM else 2
-	var result := game_state.roll_service.roll_count_successes(
-		"weapon_fire", "maliades", game_state.turn_manager.turn_number, dice_count, hit_target
-	)
-	var hits: int = result["successes"]
-	var self_damage := dice_count - hits
-
-	if self_damage > 0:
-		craft_state.set_combat_damage(craft_state.combat_damage + self_damage)
-
 	var max_damage := CraftDefinitions.get_definition("maliades").max_combat_damage
-	return AbilityResult.success({
-		"hits": hits,
-		"damage_dealt": hits,
-		"self_damage": self_damage,
-		"combat_damage": craft_state.combat_damage,
-		"destroyed": craft_state.combat_damage >= max_damage,
-	})
+
+	# The self-damage mutation lands inside the augment callback, before
+	# the roll logs/broadcasts, so the log entry and the roll_result
+	# message both already carry hits/self_damage/combat_damage rather
+	# than a bare dice total - see RollService._stamp()'s comment.
+	var result := game_state.roll_service.roll_count_successes(
+		"weapon_fire", "maliades", game_state.turn_manager.turn_number, dice_count, hit_target,
+		func(r: Dictionary) -> void:
+			var hits: int = r["successes"]
+			var self_damage := dice_count - hits
+			if self_damage > 0:
+				craft_state.set_combat_damage(craft_state.combat_damage + self_damage)
+			r["hits"] = hits
+			r["damage_dealt"] = hits
+			r["self_damage"] = self_damage
+			r["combat_damage"] = craft_state.combat_damage
+			r["destroyed"] = craft_state.combat_damage >= max_damage
+	)
+	return AbilityResult.success(result)
 
 ## Both ranges: 1 die, 5+ hits for 3 damage. No self-damage - Highwall
 ## has no stated damage track.
 func _resolve_highwall(game_state: GameState, _range_band: RangeBand) -> AbilityResult:
 	var result := game_state.roll_service.roll_count_successes(
-		"weapon_fire", "highwall", game_state.turn_manager.turn_number, 1, 5
+		"weapon_fire", "highwall", game_state.turn_manager.turn_number, 1, 5,
+		func(r: Dictionary) -> void:
+			var hit: bool = r["successes"] > 0
+			r["hits"] = 1 if hit else 0
+			r["damage_dealt"] = 3 if hit else 0
 	)
-	var hit: bool = result["successes"] > 0
-	return AbilityResult.success({"hits": 1 if hit else 0, "damage_dealt": 3 if hit else 0})
+	return AbilityResult.success(result)
 
 ## Per fighter, medium: 1 die, 5+ hits for 1 damage. Short: 1 die, 3+
 ## hits for 1 damage, 1-2 instead destroys that fighter. Assumes every
@@ -122,18 +128,18 @@ func _resolve_highwall(game_state: GameState, _range_band: RangeBand) -> Ability
 ## audit-log entry instead of fighter_count of them.
 func _resolve_fighter_wing(game_state: GameState, craft_state: CraftState, range_band: RangeBand) -> AbilityResult:
 	var hit_target := 5 if range_band == RangeBand.MEDIUM else 3
+	var starting_count := craft_state.fighter_count
+
 	var result := game_state.roll_service.roll_count_successes(
-		"weapon_fire", craft_state.id, game_state.turn_manager.turn_number, craft_state.fighter_count, hit_target
+		"weapon_fire", craft_state.id, game_state.turn_manager.turn_number, starting_count, hit_target,
+		func(r: Dictionary) -> void:
+			var hits: int = r["successes"]
+			var fighters_lost := starting_count - hits if range_band == RangeBand.SHORT else 0
+			if fighters_lost > 0:
+				craft_state.set_fighter_count(craft_state.fighter_count - fighters_lost)
+			r["hits"] = hits
+			r["damage_dealt"] = hits
+			r["fighters_lost"] = fighters_lost
+			r["fighter_count"] = craft_state.fighter_count
 	)
-	var hits: int = result["successes"]
-	var fighters_lost := craft_state.fighter_count - hits if range_band == RangeBand.SHORT else 0
-
-	if fighters_lost > 0:
-		craft_state.set_fighter_count(craft_state.fighter_count - fighters_lost)
-
-	return AbilityResult.success({
-		"hits": hits,
-		"damage_dealt": hits,
-		"fighters_lost": fighters_lost,
-		"fighter_count": craft_state.fighter_count,
-	})
+	return AbilityResult.success(result)

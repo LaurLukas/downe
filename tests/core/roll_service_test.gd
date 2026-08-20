@@ -64,6 +64,40 @@ func test_override_of_count_successes_reclassifies_target() -> void:
 	assert_eq(overridden["successes"], 1, "a forced 6 should always succeed against target 5")
 	assert_eq(overridden["target"], 5, "override should reuse the original target")
 
+func test_augment_runs_before_the_roll_is_logged() -> void:
+	# The real bug this guards against: a caller adding game-specific
+	# fields (e.g. MaintenanceCycle's "damaged") AFTER roll_sum_band()/
+	# roll_raw() returns would be too late - the roll is already
+	# logged/broadcast by then. augment() must run first so those
+	# fields are present in the log entry itself, not just the
+	# caller's local copy.
+	var service := _build_service()
+	service.roll_raw("maintenance_riot", "aegis", 1, 1, func(result: Dictionary) -> void:
+		result["custom_field"] = "present at log time"
+	)
+	assert_eq(service.log.entries[0]["custom_field"], "present at log time", "augment's additions must already be in the logged entry")
+
+func test_augment_runs_before_the_rolled_signal_fires() -> void:
+	var service := _build_service()
+	var seen: Array[Dictionary] = []
+	service.rolled.connect(func(result: Dictionary) -> void: seen.append(result))
+
+	service.roll_raw("maintenance_riot", "aegis", 1, 1, func(result: Dictionary) -> void:
+		result["custom_field"] = "present at broadcast time"
+	)
+
+	assert_eq(seen[0]["custom_field"], "present at broadcast time", "augment's additions must already be present when rolled fires, not added afterward")
+
+func test_override_can_also_augment() -> void:
+	var service := _build_service()
+	var original := service.roll_raw("maintenance_riot", "aegis", 1, 1)
+
+	var overridden := service.override_roll(original["id"], [6], func(result: Dictionary) -> void:
+		result["custom_field"] = "recomputed"
+	)
+
+	assert_eq(overridden["custom_field"], "recomputed", "override_roll should also support augmenting before it logs/broadcasts")
+
 func test_override_of_unknown_id_returns_empty() -> void:
 	var service := _build_service()
 	service.roll_raw("maintenance_riot", "dione", 1, 1)
