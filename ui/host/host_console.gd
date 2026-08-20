@@ -40,6 +40,7 @@ signal star_map_toggle_pressed()
 @onready var _add_player_button: Button = %AddPlayerButton
 @onready var _wolf_attack_section: VBoxContainer = %WolfAttackSection
 @onready var _star_map_section: VBoxContainer = %StarMapSection
+@onready var _dice_log_section: VBoxContainer = %DiceLogSection
 
 var game_state: GameState
 var _all_refreshers: Array[Callable] = []
@@ -86,6 +87,11 @@ func set_game_state(state: GameState) -> void:
 	# and some of its own buttons (Retract, per-group Set) live inside
 	# the very subtree being freed.
 	game_state.mutated.connect(_rebuild_star_map_section, CONNECT_DEFERRED)
+	# Same CONNECT_DEFERRED/full-rebuild tradeoff as Wolf Attack/Star Map
+	# above - rolls arrive as an event stream (every maintenance/combat
+	# roll, from any source), not something the host is mid-typing into,
+	# so there's nothing here a background rebuild could interrupt.
+	game_state.mutated.connect(_rebuild_dice_log_section, CONNECT_DEFERRED)
 
 	_refresh()
 	_build_ship_panels()
@@ -93,6 +99,7 @@ func set_game_state(state: GameState) -> void:
 	_build_player_panels()
 	_rebuild_wolf_attack_section()
 	_rebuild_star_map_section()
+	_rebuild_dice_log_section()
 
 func _on_advance_pressed() -> void:
 	game_state.turn_manager.advance()
@@ -978,4 +985,91 @@ func _build_star_map_claim_row(coordinate: String, claim: Dictionary, index: int
 	retract_button.text = "Retract"
 	retract_button.pressed.connect(func() -> void: game_state.reveal_state.retract_claim(coordinate, index))
 	row.add_child(retract_button)
+	return row
+
+## --- dice log ----------------------------------------------------------
+## docs/dice_engine_spec.md constraint 5 + §7: "the host can override any
+## roll, and an overridden roll is visibly marked as overridden." Every
+## other host override in this project (jump coordinates, console state,
+## pursuit track, ...) mutates game_state directly rather than round-
+## tripping through net/ - see this file's own header comment - and a
+## roll override is no different: HostConsole runs in the same process as
+## GameState, so this calls game_state.roll_service.override_roll()
+## directly. There's deliberately no network "roll_override" message type
+## (unlike roll_request, spec §7's other direction) - net/ has no concept
+## of "this connection is the host" anywhere else, and inventing one just
+## for this would duplicate a path that already exists in-process. See
+## TODO.md's Dice Engine backlog.
+
+const _DICE_LOG_DISPLAY_COUNT := 20
+
+func _rebuild_dice_log_section() -> void:
+	for child in _dice_log_section.get_children():
+		child.free()
+
+	var entries := game_state.roll_log.entries
+	if entries.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "No rolls yet."
+		_dice_log_section.add_child(empty_label)
+		return
+
+	var start := maxi(0, entries.size() - _DICE_LOG_DISPLAY_COUNT)
+	for i in range(start, entries.size()):
+		_dice_log_section.add_child(_build_dice_log_row(entries[i]))
+
+func _build_dice_log_row(entry: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+
+	var faces: PackedInt32Array = entry.get("faces", PackedInt32Array())
+	var face_strings: Array[String] = []
+	for face in faces:
+		face_strings.append(str(face))
+	var summary := Label.new()
+	summary.text = "#%d %s (%s): [%s] -> %s%s" % [
+		int(entry.get("id", 0)), String(entry.get("ship", "")), String(entry.get("reason", "")),
+		", ".join(face_strings), RollText.describe(entry),
+		" [OVERRIDDEN]" if entry.get("over", false) else "",
+	]
+	row.add_child(summary)
+
+	# Overriding corrects THIS roll's reported outcome - it does not
+	# retroactively undo or redo whatever game consequence the original
+	# roll already applied (e.g. a ship's unrest change, a craft's combat
+	# damage). If the consequence itself also needs correcting, the host
+	# already has a direct path to that via this same console's per-ship/
+	# per-craft panels above - building automatic re-application here
+	# would mean guessing at undo semantics the spec never asks for.
+	var faces_input := LineEdit.new()
+	faces_input.placeholder_text = "override faces e.g. \"6 6\""
+	faces_input.custom_minimum_size = Vector2(140, 0)
+	row.add_child(faces_input)
+
+	var override_button := Button.new()
+	override_button.text = "Override"
+	var roll_id: int = int(entry.get("id", 0))
+	var reason: String = String(entry.get("reason", ""))
+	var ship_id: String = String(entry.get("ship", ""))
+	override_button.pressed.connect(func() -> void:
+		var parsed := PackedInt32Array()
+		for token in faces_input.text.split(" ", false):
+			if token.is_valid_int():
+				parsed.append(int(token))
+		if parsed.is_empty():
+			return
+		if reason == "maintenance_riot":
+			# "damaged" is a comparison against the ship's current unrest,
+			# not something Dice.classify_*() can derive from faces alone
+			# (see RollText's own comment) - re-supply it fresh rather
+			# than let the override display as a false "no riot damage".
+			var ship := game_state.get_ship(ship_id)
+			game_state.roll_service.override_roll(roll_id, parsed, func(result: Dictionary) -> void:
+				if ship != null:
+					result["damaged"] = int(result["faces"][0]) < ship.unrest
+			)
+		else:
+			game_state.roll_service.override_roll(roll_id, parsed)
+	)
+	row.add_child(override_button)
+
 	return row

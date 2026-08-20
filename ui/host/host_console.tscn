@@ -85,3 +85,9 @@ text = "Star Map (ground truth - never sent to the TV or network)"
 
 [node name="StarMapSection" type="VBoxContainer" parent="Scroll/VBoxContainer"]
 unique_name_in_owner = true
+
+[node name="DiceLogLabel" type="Label" parent="Scroll/VBoxContainer"]
+text = "Dice Log (most recent last - overriding is the only host bypass a roll gets, per CLAUDE.md constraint 5)"
+
+[node name="DiceLogSection" type="VBoxContainer" parent="Scroll/VBoxContainer"]
+unique_name_in_owner = true

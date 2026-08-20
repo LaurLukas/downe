@@ -73,6 +73,7 @@ func _ready() -> void:
 	net_server.client_connected.connect(_on_client_connected)
 	net_server.client_disconnected.connect(_on_client_disconnected)
 	game_state.mutated.connect(_broadcast_state)
+	game_state.roll_service.rolled.connect(_on_roll_result)
 	var err := net_server.start(HTTP_LISTEN_PORT, WS_LISTEN_PORT)
 	if err != OK:
 		push_error("Main: failed to start NetServer (http %d, ws %d): %s" % [HTTP_LISTEN_PORT, WS_LISTEN_PORT, err])
@@ -217,3 +218,34 @@ func _broadcast_state() -> void:
 	net_server.broadcast(NetMessage.make("state", {"state": game_state.to_public_dict()}))
 	for player_id: String in _player_peer_ids:
 		net_server.send(_player_peer_ids[player_id], NetMessage.make("player_state", {"state": game_state.player_to_dict(player_id)}))
+
+## Mirrors a stamped roll (docs/dice_engine_spec.md §7) to every
+## connected client as its own roll_result message, rather than folding
+## it into the generic "state" broadcast above - a roll is an event a
+## client animates (tumble, then settle on the true faces), not a
+## snapshot it just re-renders. Already persisted before this ever
+## fires - see GameState.dice_engine's comment on roll_log.entry_added
+## bubbling into mutated ahead of RollService's own `rolled` emission,
+## and RollService._stamp()'s comment on why game-specific fields
+## (unrest_gain, damaged, hits, ...) are already present by the time
+## this runs rather than added afterward.
+func _on_roll_result(result: Dictionary) -> void:
+	var message := {
+		"id": result.get("id", 0),
+		"ship": result.get("ship", ""),
+		"reason": result.get("reason", ""),
+		"faces": result.get("faces", PackedInt32Array()),
+		"over": result.get("over", false),
+		"text": RollText.describe(result),
+	}
+	if result.has("modifier"):
+		message["mod"] = result["modifier"]
+	if result.has("successes"):
+		# count_successes shape: spec §7 says "band is replaced by hits
+		# and target" for this shape.
+		message["hits"] = result["successes"]
+		message["target"] = result.get("target", 0)
+	elif result.has("band"):
+		message["total"] = result.get("total", 0)
+		message["band"] = result["band"]
+	net_server.broadcast(NetMessage.make("roll_result", message))

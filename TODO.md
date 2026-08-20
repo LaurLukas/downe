@@ -3077,16 +3077,76 @@ already saw).
       and a Highwall weapon_fire in sequence against a real
       `FleetSetup`/`CraftSetup` state and confirmed the format strings
       render correctly and all three land in `roll_log`.
-- [ ] **Phase 4 — net protocol.** `roll_request`/`roll_result`/
-      `roll_override` (spec §7) added to `net/message_router.gd` alongside
-      its existing two handlers. Needs a design decision first: `net/` has
-      no notion of "this connection is the host" today, but every other
-      host override in this project (`ui/host/host_console.gd`) runs
-      in-process against `GameState` directly rather than round-tripping
-      through a network message - `roll_override` likely wants the same
-      treatment (a `RollService` method HostConsole calls directly) rather
-      than a new authorization concept in `net/`. Confirm this before
-      building a network path that duplicates the in-process one.
+- [x] **Phase 4 — net protocol.** `roll_request`/`roll_result` (spec §7)
+      built as designed; `roll_override` resolved the open design question
+      from this file's own earlier draft by going in-process, not over the
+      network - see below.
+
+      **`core/roll_text.gd`** (`RollText`, new) - the server-side "text"
+      field spec §7 asks for ("so the ESP32 firmware does not need to
+      embed rules logic"). Deliberately reads only *generic* shape fields
+      (`band`/`successes`), never a caller-stamped extra like
+      `unrest_gain`/`hits` - the reason surfaced directly while building
+      this: `RollService.override_roll()`'s recomputed dict only ever
+      carries what `Dice.classify_*()` derives, never whatever a caller's
+      *original* augment callback happened to add, so text built from
+      `unrest_gain`/`hits` would have silently described every overridden
+      roll as "no unrest gained"/"0 hits" regardless of what it actually
+      recomputed to. `maintenance_riot`'s "damaged" is the one field that
+      can't be made generic this way - it's a comparison against the
+      ship's unrest, context `RollText` deliberately doesn't have - so
+      overriding that reason needs its own fresh augment supplying it (see
+      HostConsole below). Caught before shipping by a dedicated
+      roll-then-override integration test, not by inspection.
+
+      **`net/message_router.gd`** - `roll_request` dispatches by reason key
+      through a small registry, currently just `["maintenance_riot"]`.
+      `maintenance_unrest` and `weapon_fire` are deliberately left unwired,
+      not guessed at: the first needs a ration bonus nothing tracks as
+      ship state yet (today it's a live, per-turn host-console choice),
+      the second has this file's own still-open question about who's even
+      authorized to trigger a Wolf Attack weapon roll. The client never
+      supplies dice count/modifier/threshold - only `{ship, reason}` -
+      so there's no way for a client to hand itself a favorable roll.
+
+      **`ui/main.gd`** - `game_state.roll_service.rolled` connected to a
+      new `_on_roll_result()` that builds the wire shape and broadcasts a
+      dedicated `roll_result` message (not folded into the generic `state`
+      broadcast - a roll is an event a client animates, not a snapshot it
+      re-renders).
+
+      **`roll_override` stays in-process, not a network message** -
+      resolves this file's own earlier-flagged open question. Every other
+      host override in this project already mutates `GameState` directly
+      from `ui/host/host_console.gd` rather than round-tripping through
+      `net/` (see that file's own header comment); `net/` has no concept
+      of "this connection is the host" anywhere else, and building one
+      just for this would duplicate a path that already exists. New "Dice
+      Log" section in `HostConsole` (`%DiceLogSection`, a new node in
+      `host_console.tscn`): the last 20 rolls, each with its faces/text/
+      `[OVERRIDDEN]` marker and an override control (type space-separated
+      faces, click Override -> calls
+      `game_state.roll_service.override_roll()` directly). Overriding
+      corrects the roll's *reported* outcome only, not whatever game
+      consequence the original roll already applied (a ship's unrest
+      change, a craft's combat damage) - if that also needs correcting,
+      the host already has a direct path to it via this same console's
+      existing per-ship/per-craft panels; auto-reapplying a consequence
+      would mean guessing at undo semantics the spec never asks for, and
+      is called out as such in the code.
+
+      **Verified three ways, not just unit tests**: (1) a real WebSocket
+      client against a real `NetServer`+`MessageRouter`+`GameState` -
+      `roll_request` in, a correctly-shaped `roll_result` out, over an
+      actual loopback socket; (2) the real `host_console.tscn` instantiated
+      headlessly - rolled a riot check, confirmed the Dice Log row's text,
+      typed an override face and clicked the real button, confirmed the
+      log grew to 2 entries (append, never overwrite) with the second
+      showing `[OVERRIDDEN]` and a correctly-recomputed `damaged` value
+      against the ship's actual unrest; (3) the full automated suite, 50
+      test files (was 49 - `roll_text_test.gd` new), all green. All three
+      driving scripts were throwaway, not left in the code, per this
+      project's usual practice for scene-level verification.
 - [ ] **Phase 5 — browser terminal rendering (`web/`).** Inline-SVG dice
       faces, tumble-then-settle animation (§8: 600-800ms, ~12fps, client
       already knows the true result before animating), printed arithmetic,
