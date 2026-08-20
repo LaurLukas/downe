@@ -175,7 +175,7 @@ func _refresh_standing(view: Dictionary) -> void:
 		total_capacity += wolf_ship["capacity"]
 	var pursuit: int = view["pursuit"]
 	var cap := WOLF_COMMANDER_BASE_FORCE + pursuit
-	_refresh_stat_line(total_capacity, pursuit, cap)
+	_refresh_stat_line(total_capacity, pursuit, cap, _last_weapon_roll_text(phase))
 	_refresh_pursuit_meter(pursuit)
 	_header_rule.color = WolfAttackTokens.RULE
 	_refresh_phase_breadcrumb(phase)
@@ -227,7 +227,10 @@ func _refresh_standing(view: Dictionary) -> void:
 
 	# P0-08: no "LIVE: <weapon>" debug line on the TV output - that's
 	# host-console material, not something 20 players standing around a
-	# battle map need to read off a screen.
+	# battle map need to read off a screen. Still true, and NOT what
+	# _last_weapon_roll_text() above adds - see that function's own
+	# comment on why a settled roll result (dice_engine_spec.md §8) is a
+	# different thing from the in-progress indicator this rejected.
 	if phase == "range_short" and fighter_wings_alive > 0:
 		_phase_banner.text = WolfAttackTokens.fmt_display("⚠ All fleet damage must be assigned to Wolf fighter wings first")
 		_phase_banner.visible = true
@@ -258,7 +261,7 @@ func _refresh_standing(view: Dictionary) -> void:
 ## Wolf Assault Transports" against a pursuit-0 cap of 10, and later
 ## attacks are sized by total damage capacity (15-24), not by this
 ## formula at all. Exceeding it is normal play, not a bug to report.
-func _refresh_stat_line(committed: int, pursuit: int, cap: int) -> void:
+func _refresh_stat_line(committed: int, pursuit: int, cap: int, weapon_roll_text: String) -> void:
 	var ink := WolfAttackTokens.INK.to_html(false)
 	var dim := WolfAttackTokens.INK_DIM.to_html(false)
 	var ghost := WolfAttackTokens.INK_GHOST.to_html(false)
@@ -274,7 +277,49 @@ func _refresh_stat_line(committed: int, pursuit: int, cap: int) -> void:
 	if over_cap:
 		var warn := WolfAttackTokens.AMBER.to_html(false)
 		text += "   [bgcolor=#%s][color=#%s] CAP EXCEEDED [/color][/bgcolor]" % [Color(WolfAttackTokens.AMBER, 0.16).to_html(true), warn]
+	if not weapon_roll_text.is_empty():
+		text += "   [color=#%s]·[/color]   [color=#%s]%s[/color]" % [ghost, dim, weapon_roll_text]
 	_stat_line.text = text
+
+## docs/dice_engine_spec.md §8: "a roll nobody watching the TV can see is
+## a roll that did not happen, as far as the spectacle is concerned" -
+## this is the settled RESULT of a weapon_fire roll (whichever craft
+## last fired, via the Combat Table trigger UI), not the "LIVE: <weapon>"
+## in-progress indicator P0-08 above rejected after real host-console
+## testing found it redundant. Those are different things: P0-08 was
+## about announcing what the host is doing right now (the host already
+## knows, and CLAUDE.md constraint 3 makes the physical table the actual
+## venue for that); this is the room seeing what the dice actually
+## landed on, the same reason every other outcome on this screen (damage
+## ladders, boarding results) is shown rather than left to the host to
+## report verbally.
+##
+## Deliberately the single most recent roll, not a growing list - a
+## compact addition to the existing stat line rather than a new
+## positioned element in a screen with no verified free canvas space
+## left (see TODO.md's Dice Engine Phase 6 note). Gated to
+## RANGE_MEDIUM/RANGE_SHORT, the only phases combat_table can actually
+## fire in, so a stale roll from earlier in the same attack doesn't
+## linger into targeting/boarding/resolution.
+func _last_weapon_roll_text(phase: String) -> String:
+	if game_state.wolf_attack == null or not (phase == "range_medium" or phase == "range_short"):
+		return ""
+	var attack_turn := game_state.wolf_attack.turn_number
+	var latest: Dictionary = {}
+	for entry: Dictionary in game_state.roll_log.entries:
+		if String(entry.get("reason", "")) == "weapon_fire" and int(entry.get("turn", -1)) == attack_turn:
+			latest = entry
+	if latest.is_empty():
+		return ""
+
+	var faces: PackedInt32Array = latest.get("faces", PackedInt32Array())
+	var face_strings: Array[String] = []
+	for face in faces:
+		face_strings.append(str(face))
+	var craft_id := String(latest.get("ship", ""))
+	var definition := CraftDefinitions.get_definition(craft_id)
+	var craft_label := definition.short_name if definition != null else craft_id
+	return "%s FIRED [%s] → %s" % [craft_label.to_upper(), ", ".join(face_strings), RollText.describe(latest)]
 
 func _refresh_pursuit_meter(pursuit: int) -> void:
 	_pursuit_meter.pursuit = pursuit

@@ -3195,45 +3195,64 @@ already saw).
       feeding a synthetic `over: true` result through the exact same
       `onRollResult` code path the socket handler uses. Screenshots taken
       throughout, not just console output.
-- [ ] **Phase 6 — blocked, not guessed: a real conflict with an existing
-      decision, not just unstarted work.** `dice_engine_spec.md` §8 wants
-      `weapon_fire` rolls mirrored to `ui/tv/wolf_attack_display.gd` as
-      well as the originating terminal. But that file already has an
-      explicit, deliberate decision tagged **P0-08** in `_refresh_standing()`'s
-      own comment: *"no 'LIVE: \<weapon\>' debug line on the TV output -
-      that's host-console material, not something 20 players standing
-      around a battle map need to read off a screen"* - removed after a
-      past session tested it "in real host-console use, not just
-      synthetic test data." Whether §8's roll-mirroring request is the
-      same thing P0-08 rejected (a live in-progress indicator) or a
-      different thing (a settled roll outcome, after the fact) isn't
-      obvious enough to guess at - asked the user rather than silently
-      picking a side either way. **Answer: skip Phase 6 for this pass.**
+- [x] **Phase 6 — Wolf Attack TV mirroring.** Was blocked on a real
+      conflict (see this section's own prior draft, preserved in git
+      history): `dice_engine_spec.md` §8 wants `weapon_fire` rolls
+      mirrored to `ui/tv/wolf_attack_display.gd`, but that file's own
+      **P0-08** comment explicitly rejects a "LIVE: \<weapon\>" debug line
+      there, removed after a past session found it was host-console
+      clutter in real use. First pass asked the user rather than guessing;
+      asked again to resolve it directly, so here's the resolution and the
+      build.
 
-      One more reason this needed a real decision, not just "build it
-      carefully": the STANDING layout is a pixel-precise, previously
-      user-reviewed screen (v1/v2/v3 passes, each iterated against actual
-      human visual feedback) with no free space left in its safe-margin
-      canvas for a new element without a real design pass - see
-      `ui/tv/wolf_attack_display.tscn`, `CannotBeTargetedRow` already sits
-      right at `SAFE_MARGIN_BOTTOM`.
+      **The reconciliation**: these are different things, not the same
+      complaint twice. §8's wire example and its own words - "a roll
+      nobody watching the TV can see is a roll that did not happen, as
+      far as the spectacle is concerned" - are about the *settled result*
+      of a roll: dice landing, shown to the room as spectacle, same
+      category as the damage ladders and boarding outcomes this screen
+      already shows. P0-08 rejected a *live, in-progress* indicator of
+      which ability is currently resolving - administrative "here's what
+      the host is doing right now" information, redundant with the
+      physical table CLAUDE.md constraint 3 already makes the real venue
+      for. A settled outcome and a live process indicator aren't the same
+      feature wearing different words.
 
-      **Update**: the other reason this note originally gave - "nothing
-      in the game triggers a `weapon_fire` roll yet" - no longer holds.
-      The Combat Table trigger UI (below) now lets the host fire
-      Maliades/Highwall/fighter wings for real during a live attack, so
-      there's a genuine live source of `weapon_fire` rolls to mirror if
-      Phase 6 gets picked back up. The P0-08-vs-§8 design question is
-      still exactly as open as before - this only removes the "nothing
-      to even test against" part of the blocker, not the actual decision.
+      **`ui/tv/wolf_attack_display.gd`** - `_last_weapon_roll_text(phase)`
+      (new): the single most recent `weapon_fire` roll from
+      `game_state.roll_log`, filtered to the current `WolfAttack.
+      turn_number` and gated to `RANGE_MEDIUM`/`RANGE_SHORT` (the only
+      phases `combat_table` can actually fire in - the ability has no
+      LONG option). Appended to the *existing* `_stat_line` RichTextLabel
+      (`"C.S.S. "HIGHWALL" FIRED [4] → 0 hits"`, muted `INK_DIM`,
+      reusing that line's own BBCode color conventions) rather than a new
+      positioned element - the lowest-risk integration into a pixel-
+      precise, previously user-reviewed screen with no verified free
+      canvas space, and deliberately a *single* roll, not a growing list,
+      to stay a compact addition rather than a second Dice Log. Text
+      itself is built with `RollText.describe()` and `CraftDefinition.
+      short_name` - reusing the Dice Engine work rather than a third way
+      to render a roll outcome. The P0-08 comment itself now cross-
+      references this function so a future reader doesn't read the two as
+      contradicting each other.
 
-      If this gets picked back up later: reconcile with the P0-08 author's
-      intent first (is a settled-outcome feed actually different from a
-      live debug line, or the same complaint in a new form), then treat
-      placement as its own small design pass - most likely appended to
-      `_stat_line`'s existing text-summary content (lowest-risk: no new
-      node/pixel position, reuses an already-fitting element) rather than
-      a new `RichTextLabel` guessed into open canvas space.
+      **Verified against the real engine, not just reading the code**: a
+      throwaway driving script instantiated the real
+      `wolf_attack_display.tscn`, confirmed no roll text during INCOMING
+      or before any weapon fired, fired the real Highwall craft through
+      `AbilityRegistry` (an actual rolled face, not a fixture) and
+      confirmed the stat line picked it up with correct BBCode styling,
+      confirmed it persists into `RANGE_SHORT` (same attack, same
+      "most recent" scope), and confirmed that although the underlying
+      label text goes stale once the attack reaches `BOARDING` (nothing
+      refreshes `_stat_line` outside `_refresh_standing()`, same as every
+      other STANDING-panel field), `%StandingPanel` itself is `visible =
+      false` by then - so nothing stale is actually shown, not a bug, the
+      same pattern this whole panel already relies on elsewhere. No new
+      test file - this project's suite doesn't instantiate `.tscn` Control
+      scenes anywhere (same reason the Combat Table trigger UI above has
+      none either); verification was the driving script. Full suite still
+      green, 50 test files, no `core/` changes this pass.
 
 **Explicitly not touched by any phase above**, per spec §4's own table and
 CLAUDE.md constraints 1/2: away-mission card assignment and scout coordinate
