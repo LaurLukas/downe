@@ -3147,13 +3147,53 @@ already saw).
       test files (was 49 - `roll_text_test.gd` new), all green. All three
       driving scripts were throwaway, not left in the code, per this
       project's usual practice for scene-level verification.
-- [ ] **Phase 5 — browser terminal rendering (`web/`).** Inline-SVG dice
-      faces, tumble-then-settle animation (§8: 600-800ms, ~12fps, client
-      already knows the true result before animating), printed arithmetic,
-      the per-terminal roll log, `prefers-reduced-motion` handling, the
-      override marker. ESP32 firmware is out-of-repo per CLAUDE.md - this
-      phase is the browser terminal only; flag in the handoff that
-      firmware needs the same treatment, simplified.
+- [x] **Phase 5 — browser terminal rendering (`web/`).** Built as
+      designed: a "Roll riot check" button (`maintenance_riot` is the one
+      reason key Phase 4 wired to `roll_request`), inline-SVG d6 faces
+      (7-pip layout, white with dark pips regardless of ship colour -
+      never red, per spec §8/CLAUDE.md's colour-is-identity rule; a
+      `--warn` amber custom property added specifically so the override
+      badge below has a colour to use that isn't `--danger` red), a
+      tumble-then-settle animation (700ms, ~12fps, `prefers-reduced-motion`
+      skips straight to the true faces), printed arithmetic (dice sum,
+      modifier with a reason-specific label where spec's own example gives
+      one - `"rations"` for `maintenance_unrest`, generic `"mod"`
+      otherwise, since this terminal can receive a broadcast `roll_result`
+      for *any* reason key, not just the one it can request), and a
+      per-ship-filtered roll log (last 20, `shipSelect`-scoped, re-filters
+      instantly on ship switch without a new request). Override marker is
+      a small, separate, unmissable badge per spec §8's own words ("not
+      apologetic") rather than folded quietly into the arithmetic
+      sentence.
+
+      ESP32 firmware is out-of-repo per CLAUDE.md - this phase is the
+      browser terminal only; a future firmware pass needs the same
+      treatment, simplified (no SVG, probably a simpler settle-only
+      display given ESP32 RAM constraints per CLAUDE.md's Networking
+      section).
+
+      **A real environment issue found and fixed along the way, not a
+      code bug**: manual verification initially found the button
+      producing nothing - traced to `ports 8080/8081` already being held
+      by a stray Godot process left running from *before this session*,
+      serving a stale pre-Phase-4 build of the app. Every new launch this
+      session was silently failing to bind (`ERROR: Main: failed to start
+      NetServer... 22`) while the old process kept answering HTTP
+      requests normally, making it look like a client bug. Fixed by
+      stopping every Godot process and relaunching clean; worth
+      remembering if a future session's manual verification behaves like
+      requests are reaching an app that doesn't have today's code.
+
+      **Verified in a real browser against the real running app** (not
+      just reading the code): navigated to `http://127.0.0.1:8080/`,
+      clicked the real "Roll riot check" button twice, watched the tumble
+      settle on the correct pip layout each time (1, then 2), confirmed
+      the arithmetic/outcome line and both roll log rows. Separately
+      confirmed the override badge and roll-log highlight render correctly
+      (amber, unmissable, distinct from the teal accent and from red) by
+      feeding a synthetic `over: true` result through the exact same
+      `onRollResult` code path the socket handler uses. Screenshots taken
+      throughout, not just console output.
 - [ ] **Phase 6 — Wolf Attack TV mirroring.** `weapon_fire` rolls mirror to
       `ui/tv/wolf_attack_display.gd` as well as the originating terminal
       (§8's closing note) - matches CLAUDE.md constraint 3's "TV as

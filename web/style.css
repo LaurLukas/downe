@@ -5,6 +5,11 @@
 	--text: #d8e6e0;
 	--accent: #35c2a0;
 	--danger: #d9534f;
+	/* Dice engine only - never --danger (red). CLAUDE.md/
+	   dice_engine_spec.md §8: colour is identity in this project, red
+	   belongs exclusively to the Wolves, and dice are always white with
+	   dark pips regardless of ship colour. */
+	--warn: #f0b429;
 }
 
 * {
@@ -124,4 +129,55 @@ button:active {
 	border: 1px solid #223;
 	border-radius: 0.4rem;
 	padding: 0.6rem;
+}
+
+.dice-row {
+	display: flex;
+	gap: 0.5rem;
+	min-height: 3.2rem;
+	align-items: center;
+}
+
+.die {
+	flex-shrink: 0;
+}
+
+.dice-arithmetic {
+	font-size: 0.95rem;
+	min-height: 1.4rem;
+}
+
+.override-badge {
+	align-self: flex-start;
+	background: var(--warn);
+	color: #1a1200;
+	font-weight: bold;
+	font-size: 0.8rem;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	padding: 0.25rem 0.6rem;
+	border-radius: 0.3rem;
+}
+
+.roll-log {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	max-height: 12rem;
+	overflow-y: auto;
+	font-size: 0.85rem;
+}
+
+.roll-log li {
+	background: var(--panel);
+	border: 1px solid #223;
+	border-radius: 0.3rem;
+	padding: 0.4rem 0.6rem;
+}
+
+.roll-log li.roll-overridden {
+	border-color: var(--warn);
 }
