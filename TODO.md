@@ -3194,11 +3194,42 @@ already saw).
       feeding a synthetic `over: true` result through the exact same
       `onRollResult` code path the socket handler uses. Screenshots taken
       throughout, not just console output.
-- [ ] **Phase 6 — Wolf Attack TV mirroring.** `weapon_fire` rolls mirror to
-      `ui/tv/wolf_attack_display.gd` as well as the originating terminal
-      (§8's closing note) - matches CLAUDE.md constraint 3's "TV as
-      spectacle supporting the physical gathering" the same way the
-      existing Wolf Attack display work already does.
+- [ ] **Phase 6 — blocked, not guessed: a real conflict with an existing
+      decision, not just unstarted work.** `dice_engine_spec.md` §8 wants
+      `weapon_fire` rolls mirrored to `ui/tv/wolf_attack_display.gd` as
+      well as the originating terminal. But that file already has an
+      explicit, deliberate decision tagged **P0-08** in `_refresh_standing()`'s
+      own comment: *"no 'LIVE: \<weapon\>' debug line on the TV output -
+      that's host-console material, not something 20 players standing
+      around a battle map need to read off a screen"* - removed after a
+      past session tested it "in real host-console use, not just
+      synthetic test data." Whether §8's roll-mirroring request is the
+      same thing P0-08 rejected (a live in-progress indicator) or a
+      different thing (a settled roll outcome, after the fact) isn't
+      obvious enough to guess at - asked the user rather than silently
+      picking a side either way. **Answer: skip Phase 6 for this pass.**
+
+      Two more reasons this needed a real decision, not just "build it
+      carefully": the STANDING layout is a pixel-precise, previously
+      user-reviewed screen (v1/v2/v3 passes, each iterated against actual
+      human visual feedback) with no free space left in its safe-margin
+      canvas for a new element without a real design pass - see
+      `ui/tv/wolf_attack_display.tscn`, `CannotBeTargetedRow` already sits
+      right at `SAFE_MARGIN_BOTTOM`. And separately, nothing in the game
+      currently triggers a `weapon_fire` roll at all yet -
+      `CombatTableAbility`'s execute() has no caller anywhere in `ui/`,
+      per this file's own Wolf Attack system section above ("wiring that
+      into this UI as a convenience button was explicitly deferred") -
+      so there's no live path to verify this against even structurally
+      right now.
+
+      If this gets picked back up later: reconcile with the P0-08 author's
+      intent first (is a settled-outcome feed actually different from a
+      live debug line, or the same complaint in a new form), then treat
+      placement as its own small design pass - most likely appended to
+      `_stat_line`'s existing text-summary content (lowest-risk: no new
+      node/pixel position, reuses an already-fitting element) rather than
+      a new `RichTextLabel` guessed into open canvas space.
 
 **Explicitly not touched by any phase above**, per spec §4's own table and
 CLAUDE.md constraints 1/2: away-mission card assignment and scout coordinate
