@@ -147,6 +147,34 @@ func test_rehydrated_pursuit_track_mutation_still_bubbles_to_mutated() -> void:
 
 	assert_true(count[0] > 0, "mutating a rehydrated pursuit track should still reach GameState.mutated")
 
+func test_round_trips_dice_seed_state_and_sequence() -> void:
+	var state := _build_interesting_state()
+	state.roll_service.roll_sum_band("maintenance_unrest", "aegis", 1, 2, 0, [12, 20])
+	state.roll_service.roll_count_successes("weapon_fire", "maliades", 1, 1, 4)
+	var saved := state.to_dict()
+
+	var loaded := GameState.from_dict(saved)
+
+	assert_eq(loaded.roll_service.sequence(), 2, "the roll sequence counter should round-trip, not reset to 0")
+	assert_eq(loaded.roll_log.entries.size(), 2, "the roll audit log should round-trip in full")
+	# Both streams now continue from the exact same saved snapshot - if
+	# restore() replayed from the seed instead of resuming the stream,
+	# these would disagree the moment the seed's early rolls repeat.
+	assert_eq(loaded.dice_engine.roll(3), state.dice_engine.roll(3), "restoring must resume the dice stream, not replay it from the seed - a reload must never reroll a result someone already saw")
+
+func test_a_roll_after_reload_gets_the_next_sequence_id_not_a_reused_one() -> void:
+	# The real failure mode this guards against: without restoring the
+	# sequence counter, a crash-recovery restart would hand out roll id
+	# 1 again for the next roll, colliding with the id already shown to
+	# players before the crash.
+	var state := _build_interesting_state()
+	state.roll_service.roll_raw("maintenance_riot", "aegis", 1, 1)
+
+	var loaded := GameState.from_dict(state.to_dict())
+	var next_roll := loaded.roll_service.roll_raw("maintenance_riot", "aegis", 1, 1)
+
+	assert_eq(next_roll["id"], 2, "a roll after reload should continue the sequence, not restart it")
+
 func test_from_dict_on_empty_dict_does_not_crash() -> void:
 	var loaded := GameState.from_dict({})
 	assert_eq(loaded.ships.size(), 0, "loading {} should produce an empty, but valid, GameState")

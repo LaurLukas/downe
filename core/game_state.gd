@@ -57,13 +57,37 @@ func generate_player_id() -> String:
 ## roll sequence in progress.
 var rng := RandomNumberGenerator.new()
 
+## The dice engine's own stream - docs/dice_engine_spec.md. Deliberately
+## separate from `rng` above rather than a replacement for it: `rng`
+## already backs a dozen unrelated call sites (player id generation,
+## mining/boarding/harvesting abilities, Wolf ship targeting, ...) that
+## are outside the spec's roll catalogue (§4) and only persist a seed,
+## not a full seed+state+sequence snapshot - migrating all of them onto
+## Dice would be a much larger, unrelated change. `dice_engine` and
+## `roll_log` back only the catalogued reason keys, migrated onto
+## `roll_service` one at a time (see TODO.md's Dice Engine backlog).
+var dice_engine := Dice.new()
+var roll_log := RollLog.new()
+var roll_service: RollService
+
 func _init() -> void:
+	roll_service = RollService.new(dice_engine, roll_log)
 	turn_manager.phase_changed.connect(_on_phase_changed)
 	turn_manager.phase_changed.connect(func(_turn: int, _phase: TurnManager.Phase) -> void: mutated.emit())
 	turn_manager.advanced.connect(_on_advanced)
 	pursuit_track.changed.connect(func(_new_value: int) -> void: mutated.emit())
 	pursuit_track.changed.connect(fleet_positions.sync_global_pursuit)
 	announcement_log.entry_added.connect(func(_entry: Dictionary) -> void: mutated.emit())
+	# Every roll must be on disk before anything broadcasts it (spec §6:
+	# "the roll result is persisted before it is broadcast" - a crash
+	# between rolling and displaying must not produce a different number
+	# on recovery). RollService.rolled is a separate signal net/ connects
+	# to directly for the dedicated roll_result message (spec §7), not
+	# routed through `mutated` - but log.add() (called synchronously
+	# before RollService emits `rolled`, see roll_service.gd) bubbles
+	# through entry_added -> mutated -> Persistence.save() here, so by
+	# the time any `rolled` handler runs, the roll is already saved.
+	roll_log.entry_added.connect(func(_entry: Dictionary) -> void: mutated.emit())
 	fleet_positions.changed.connect(mutated.emit)
 	reveal_state.changed.connect(mutated.emit)
 
@@ -160,6 +184,9 @@ func to_dict() -> Dictionary:
 		"chart_in_play": chart_in_play,
 		"turn": turn_manager.to_dict(),
 		"rng_seed": rng.seed,
+		"dice": dice_engine.serialise(),
+		"roll_log": roll_log.to_dict(),
+		"roll_sequence": roll_service.sequence(),
 		"ships": ship_dict,
 		"craft": craft_dict,
 		"announcement_log": announcement_log.to_dict(),
@@ -232,6 +259,13 @@ func player_to_dict(player_id: String) -> Dictionary:
 static func from_dict(data: Dictionary) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = int(data.get("rng_seed", state.rng.seed))
+	state.dice_engine.restore(data.get("dice", {}))
+	state.roll_log.load_from_dict(data.get("roll_log", {}))
+	# Reconstructs against the same dice_engine/roll_log the restored
+	# stream continues from, just with the sequence counter resumed
+	# instead of starting back at 0 - a crash-recovery restart must not
+	# reissue roll ids that already went out (spec §6).
+	state.roll_service = RollService.new(state.dice_engine, state.roll_log, int(data.get("roll_sequence", 0)))
 	state.pursuit_track.load_from_dict(data.get("pursuit_track", {}))
 	state.chart_in_play = String(data.get("chart_in_play", "A"))
 	state.fleet_positions.load_from_dict(data.get("fleet_positions", {}))

@@ -2967,13 +2967,44 @@ already saw).
       `godot --headless --editor --quit` once to force a rescan; worth
       remembering if a future session hits the same thing after adding a
       new `class_name` file.
-- [ ] **Phase 2 — `GameState` persistence upgrade.** Serialise `rng.state`
-      and a monotonic `sequence` alongside the existing `rng.seed`; add the
-      audit log itself. Roll result must be persisted *before* it's
-      broadcast (§6) - likely means `RollService` writes synchronously into
-      `GameState` and hands back the stamped result for the caller to
-      broadcast, not a fire-and-forget signal the network layer might pick
-      up after the next autosave already ran.
+- [x] **Phase 2 — `GameState` persistence upgrade.** `GameState` gained
+      `dice_engine: Dice`, `roll_log: RollLog`, and `roll_service:
+      RollService`, all serialised (`dice`/`roll_log`/`roll_sequence` keys
+      in `to_dict()`, restored in `from_dict()` including reconstructing
+      `roll_service` with the saved sequence so a reload can't reissue an
+      id that already went out). Deliberately a *new*, separate stream
+      from the existing `rng: RandomNumberGenerator` field, not a
+      replacement - `rng` already backs a dozen call sites outside the
+      spec's roll catalogue (player id generation, mining/boarding/
+      harvesting abilities, Wolf ship targeting) that only ever persisted
+      a seed; migrating all of them onto `Dice` would be a much larger,
+      unrelated change. Only the catalogued reason keys move onto
+      `roll_service`, one at a time (Phase 3).
+
+      **Persist-before-broadcast (§6) falls out of the existing signal-
+      bubbling pattern, not new plumbing**: `roll_log.entry_added` bubbles
+      into `GameState.mutated` exactly like `announcement_log.entry_added`
+      already does. `RollService._stamp()`/`override_roll()` call
+      `log.add()` (which fires that bubble synchronously, reaching
+      `Persistence.save()` before returning) *before* emitting their own
+      `rolled` signal - so by the time net/ (Phase 4) reacts to `rolled`
+      to send the dedicated `roll_result` message, the roll is already on
+      disk. No explicit ordering code needed; it's a consequence of GDScript
+      signals being synchronous and `log.add()` running first in both
+      methods.
+
+      2 new tests in `game_state_persistence_test.gd` (sequence/log
+      round-trip; the real regression this exists to prevent - restoring
+      must resume the dice stream, not replay it from the seed, checked by
+      comparing the live and reloaded streams' next rolls from the same
+      saved snapshot) and 2 in `game_state_mutated_test.gd` (a roll and an
+      override each reach `mutated`). 49 test files still green (no new
+      files this phase, existing ones extended). Also verified against a
+      real `FleetSetup`/`GameState` instance headlessly, not just the unit
+      tests: rolled twice, confirmed `to_dict()` carries all three new
+      keys, round-tripped through `from_dict()`, confirmed the live and
+      reloaded dice streams agree on their next two rolls, and confirmed a
+      third roll after reload gets sequence id 3, not a reused 1.
 - [ ] **Phase 3 — migrate the three existing raw-rng call sites onto
       `RollService`.** `MaintenanceCycle.roll_unrest_gain()`/
       `roll_riot_damage()` and `CombatTableAbility`'s three resolvers.

@@ -121,6 +121,28 @@ func test_player_suspicion_change_on_an_added_player_emits_mutated() -> void:
 
 	assert_true(count[0] > 0, "changing an already-added player's suspicion should emit mutated")
 
+func test_a_roll_emits_mutated_before_roll_service_returns() -> void:
+	# The roll must be on disk before anything broadcasts it (dice_engine_
+	# spec.md §6) - roll_log.entry_added bubbling into mutated (and
+	# Persistence.save() being wired to mutated) is what guarantees that,
+	# since it runs synchronously inside RollService's own call, before
+	# the caller ever sees the returned result.
+	var state := GameState.new()
+	var count := _count_mutations(state)
+
+	state.roll_service.roll_sum_band("maintenance_unrest", "aegis", 1, 2, 0, [12, 20])
+
+	assert_true(count[0] > 0, "rolling through roll_service should emit mutated")
+
+func test_an_override_emits_mutated() -> void:
+	var state := GameState.new()
+	var original := state.roll_service.roll_sum_band("maintenance_unrest", "aegis", 1, 2, 0, [12, 20])
+	var count := _count_mutations(state)
+
+	state.roll_service.override_roll(original["id"], [6, 6])
+
+	assert_true(count[0] > 0, "overriding a roll should emit mutated")
+
 func test_player_clue_on_an_added_player_emits_mutated() -> void:
 	var state := GameState.new()
 	var player := Player.new("p1", "Alex")
