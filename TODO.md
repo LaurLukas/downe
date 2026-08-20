@@ -2892,3 +2892,155 @@ list above: cumulative-per-tier confirmed and wired into `JumpResolver`,
 merge reconciliation built into `FleetPositions`/the admin console).
 The README was written against the pre-this-session state of the
 project; nothing here blocks starting the visual work.
+
+## Backlog — Digital Dice Engine
+
+New spec landed: `docs/dice_engine_spec.md` (its own header says "status:
+specification, not yet implemented"). Read in full, cross-checked against
+current `core/`/`net/` state below. This section is the build plan, not a
+retrospective - nothing in it is built yet.
+
+**Why this one's worth reading the whole spec for, not just this summary**:
+the spec's §1 frames the risk correctly - this game's social fabric is
+players accusing each other of being Wolf agents, and "the software rolled
+badly" is the accusation a bad implementation invites next. Individual dice
+faces, printed arithmetic, and an append-only log aren't polish, they're
+what stops that accusation from being unanswerable. §11 is explicit: no
+fairness correction, no streak-breaking, nothing clever. Build exactly the
+three roll shapes in §3 and nothing else.
+
+**What this replaces**: dice already get rolled today in three places, all
+as bare `game_state.rng.randi_range()` calls with no shared module, no face
+capture (only the summed total), no audit log, and no override path:
+- `core/maintenance_cycle.gd`'s `roll_unrest_gain()` (2d6, sum_band-shaped)
+  and `roll_riot_damage()` (1d6 vs current unrest)
+- `core/craft/abilities/combat_table.gd`'s three resolvers - Maliades,
+  Highwall, fighter wings (all count_successes-shaped)
+
+`GameState.to_dict()`/`from_dict()` (`core/game_state.gd:162,234`) also only
+round-trips `rng.seed`, never `rng.state` or a sequence counter - today, a
+crash-recovery restart silently resumes the RNG stream from the wrong point
+rather than where it actually was. Spec §6 is the fix for exactly this, and
+explains why it matters (a restart must never re-roll a result someone
+already saw).
+
+### Planned phases
+
+- [x] **Phase 1 — `core/dice.gd` + `core/roll_log.gd` + `core/roll_service.gd`.**
+      Built as three files instead of two: `Dice` (the primitive -
+      `roll`/`sum_band`/`count_successes`/`serialise`/`restore`, spec §5,
+      plus static `classify_sum_band()`/`classify_count_successes()` split
+      out so override recompute can reclassify host-supplied faces without
+      rolling), `RollLog` (append-only audit trail, deliberately *not*
+      capped like `AnnouncementLog` - the whole point is nothing gets
+      trimmed away), and `RollService` (stamps `id`/`reason`/`ship`/`turn`/
+      `over`, appends to the log, emits `rolled`). Pure `RefCounted`
+      throughout, no wiring to any call site yet - `GameState` still owns
+      its original `rng: RandomNumberGenerator` untouched; this is a new,
+      separate, independently-serialised stream (see Phase 2 below for why
+      that's the right call, not a shortcut).
+
+      `override_roll(id, faces)` keeps the *original* roll's `id` rather
+      than minting a new one - matches spec §7's wire example, where a
+      host override rebroadcasts as the same numbered roll, just marked
+      `over: true`. The log still gets a new, separate entry for it
+      (append, never overwrite, per spec) - `RollLog.find_by_id()` always
+      resolves to the oldest match, so a roll overridden twice still
+      recomputes from the true original's recipe (n/modifier/thresholds or
+      n/target), not from a previous override's.
+
+      Tests per spec §9, split across `tests/core/dice_test.gd`,
+      `roll_log_test.gd`, `roll_service_test.gd`: fixed-seed determinism,
+      serialise→restore continuity (including the regression this exists
+      to prevent - restoring must resume the stream, not replay from the
+      seed), a 60k-roll uniformity smoke test, band-boundary cases at
+      11/12/19/20, count_successes at target 4 and 5 (all-fail/all-hit),
+      override recompute without re-rolling, and the original log entry
+      staying untouched by a later override. 49 test files total (was 46),
+      all green.
+
+      One environment snag, not a code bug: a fresh test run hung/failed
+      with "Identifier 'Dice' not declared in the current scope" -
+      `.godot/global_script_class_cache.cfg` was stale from before these
+      files existed, and `godot --headless --script ...` doesn't rescan
+      for new `class_name` declarations on its own. Fixed by running
+      `godot --headless --editor --quit` once to force a rescan; worth
+      remembering if a future session hits the same thing after adding a
+      new `class_name` file.
+- [ ] **Phase 2 — `GameState` persistence upgrade.** Serialise `rng.state`
+      and a monotonic `sequence` alongside the existing `rng.seed`; add the
+      audit log itself. Roll result must be persisted *before* it's
+      broadcast (§6) - likely means `RollService` writes synchronously into
+      `GameState` and hands back the stamped result for the caller to
+      broadcast, not a fire-and-forget signal the network layer might pick
+      up after the next autosave already ran.
+- [ ] **Phase 3 — migrate the three existing raw-rng call sites onto
+      `RollService`.** `MaintenanceCycle.roll_unrest_gain()`/
+      `roll_riot_damage()` and `CombatTableAbility`'s three resolvers.
+      Behavior-preserving - same dice counts, same thresholds - the change
+      is that individual faces get captured, stamped, and logged for rolls
+      that already happen today. Existing tests for these should still
+      pass on outcome; add face-level assertions.
+- [ ] **Phase 4 — net protocol.** `roll_request`/`roll_result`/
+      `roll_override` (spec §7) added to `net/message_router.gd` alongside
+      its existing two handlers. Needs a design decision first: `net/` has
+      no notion of "this connection is the host" today, but every other
+      host override in this project (`ui/host/host_console.gd`) runs
+      in-process against `GameState` directly rather than round-tripping
+      through a network message - `roll_override` likely wants the same
+      treatment (a `RollService` method HostConsole calls directly) rather
+      than a new authorization concept in `net/`. Confirm this before
+      building a network path that duplicates the in-process one.
+- [ ] **Phase 5 — browser terminal rendering (`web/`).** Inline-SVG dice
+      faces, tumble-then-settle animation (§8: 600-800ms, ~12fps, client
+      already knows the true result before animating), printed arithmetic,
+      the per-terminal roll log, `prefers-reduced-motion` handling, the
+      override marker. ESP32 firmware is out-of-repo per CLAUDE.md - this
+      phase is the browser terminal only; flag in the handoff that
+      firmware needs the same treatment, simplified.
+- [ ] **Phase 6 — Wolf Attack TV mirroring.** `weapon_fire` rolls mirror to
+      `ui/tv/wolf_attack_display.gd` as well as the originating terminal
+      (§8's closing note) - matches CLAUDE.md constraint 3's "TV as
+      spectacle supporting the physical gathering" the same way the
+      existing Wolf Attack display work already does.
+
+**Explicitly not touched by any phase above**, per spec §4's own table and
+CLAUDE.md constraints 1/2: away-mission card assignment and scout coordinate
+entry stay dice-free and unvalidated. If a future change to either of those
+looks like it wants a die, that's a sign to re-read constraint 1 or 2, not a
+gap in this engine.
+
+### Open questions (spec's own §10) — flagged, not guessed at
+
+1. Does an undamaged jump drive roll at all, or does `jump_attempt` only
+   apply once the `jump_drive` console is damaged? `core/jump.gd`
+   (`JumpResolver`) has no roll concept at all today, so this blocks adding
+   `jump_attempt` to it - not scheduled as its own phase above until
+   answered.
+2. Roll the riot die at unrest 0 even though it can't trigger (spec leans
+   yes, for visible transparency) or skip it? Affects Phase 3's
+   `roll_riot_damage()` migration.
+3. Should an overridden roll be visibly marked to players, or does that
+   undermine the host's ability to quietly fix a mistake? Spec's default is
+   visible-always; affects Phase 5's override marker and whether Phase 4's
+   broadcast needs a quiet variant.
+4. Survivor loss per point of damage - already an open project-wide
+   blocker (see the Wolf Attack system section above); also blocks riot
+   outcome text once Small Ships exist.
+5. Who triggers a Wolf Attack weapon roll - the ship's own terminal, or the
+   host at the battle map? Affects whether Phase 4's `roll_request` needs
+   an authorization check specifically on `weapon_fire`.
+6. `salvage_drones` needs the Wolf Attack module to expose a combined
+   both-sides damage total - not confirmed to exist in
+   `core/combat/wolf_attack.gd` yet. Moot regardless until R.S.S. Warrior
+   (a Small Ship) is modeled as an object at all - same gap noted
+   repeatedly elsewhere in this file.
+7. Physical-dice reintroduction later (a `source` field on `roll_result`:
+   `engine`/`manual`/`override`). Cheap to include in Phase 4's message
+   shape from the start even with no UI yet; expensive to retrofit into
+   ESP32 firmware later. Build the field in from day one of Phase 4.
+
+**Sequencing**: Phases 1-3 have no source-material ambiguity blocking them
+and can start immediately. Phase 4 touches two of the open questions above
+(override authorization, the `source` field) worth settling before writing
+protocol code that would need to change shape after the fact.
